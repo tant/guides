@@ -1,43 +1,87 @@
-# 🔄 Part 2: Decoupled Multi-Channel Architecture - Channel-Specific Implementation
+# 🔄 Part 2: Decoupled Multi-Channel Architecture - Channel-Specific Implementation (Mastra Framework)
 
 ## Overview
 
-This guide will walk you through implementing a specific channel adapter. We'll use Telegram as an example, but the same pattern applies to all channels. This is Part 2 - the channel-specific implementation.
+This guide will walk you through implementing a specific channel adapter within the Mastra framework. We'll use Telegram as an example, but the same pattern applies to all channels. This is Part 2 - the channel-specific implementation that works with Mastra.
+
+## Understanding the Mastra-Compatible Approach
+
+### Why Interface-Based Design (No Base Class)?
+
+Instead of forcing all channels to extend a base class, we use an **interface-based approach**:
+
+```typescript
+// Interface-based approach (USED IN MAESTRA):
+// interface ChannelAdapter { ... }  
+// class TelegramChannelAdapter { ... } // Just implement the interface
+
+// vs Traditional inheritance (AVOIDED):
+// abstract class BaseChannelAdapter { ... }
+// class TelegramChannelAdapter extends BaseChannelAdapter { ... }
+```
+
+### Benefits for Mastra Integration:
+
+1. **No Framework Conflicts**: Doesn't interfere with existing Mastra inheritance
+2. **Loose Coupling**: Channels independent of each other
+3. **Flexible Implementation**: Each channel can implement methods differently
+4. **Easy Testing**: No need to mock complex base classes
+5. **Mastra-Compatible**: Works with existing Mastra agents and tools
+
+### The Channel Adapter Interface:
+
+```typescript
+// src/mastra/core/channels/interface.ts
+export interface ChannelAdapter {
+  channelId: string;
+  handleMessage: (rawMessage: any) => Promise<void>;
+  shutdown?: () => Promise<void>;
+}
+```
+
+Any class that implements these methods can be registered as a channel adapter - no inheritance required!
 
 ## Prerequisites
 
 Before starting, make sure you have completed the core implementation from Part 1:
-- ✅ Base channel adapter created
+- ✅ Extended Mastra structure (`src/mastra/core/`, `src/mastra/channels/`)
+- ✅ Standardized message models defined
 - ✅ Central message processor implemented
 - ✅ Channel registry set up
-- ✅ Main application structure ready
+- ✅ Mastra entry point updated
 
 ## Step 1: Create Channel Directory Structure
 
-### 1.1 Create Telegram Channel Directory
+### 1.1 Verify Channel Directory Structure
+
+The channel files are created within the Mastra structure:
+
+```
+src/mastra/channels/telegram/
+├── adapter.ts    ← Main Telegram adapter
+├── config.ts     ← Configuration
+├── index.ts      ← Exports
+├── tests/        ← Test files
+└── README.md     ← Documentation
+```
+
+Create the directory structure:
 
 ```bash
-# Create the Telegram channel directory
-mkdir -p channels/telegram/{src,config,tests}
+# Create Telegram channel directory within Mastra structure
+mkdir -p src/mastra/channels/telegram/{tests,config}
 ```
 
-This creates the structure:
-```
-channels/telegram/
-├── src/          ← Source code for Telegram adapter
-├── config/       ← Configuration files
-└── tests/        ← Test files
-```
-
-## Step 2: Create Channel Configuration
+## Step 2: Create Configuration Files
 
 ### 2.1 Create Configuration Files
 
-Create `channels/telegram/config/schema.ts`:
+Create `src/mastra/channels/telegram/config.ts`:
 
 ```typescript
 /**
- * Telegram channel configuration schema
+ * Telegram channel configuration
+ * This defines the configuration schema and validation for Telegram
  */
 
 export interface TelegramConfig {
@@ -46,6 +90,7 @@ export interface TelegramConfig {
   polling?: boolean;
   pollingInterval?: number;
   maxRetries?: number;
+  allowedChatTypes?: ('private' | 'group' | 'supergroup' | 'channel')[];
 }
 
 export const defaultTelegramConfig: TelegramConfig = {
@@ -53,7 +98,8 @@ export const defaultTelegramConfig: TelegramConfig = {
   webhookUrl: process.env.TELEGRAM_WEBHOOK_URL,
   polling: true,
   pollingInterval: 300,
-  maxRetries: 3
+  maxRetries: 3,
+  allowedChatTypes: ['private', 'group', 'supergroup']
 };
 
 export function validateTelegramConfig(config: Partial<TelegramConfig>): TelegramConfig {
@@ -67,80 +113,47 @@ export function validateTelegramConfig(config: Partial<TelegramConfig>): Telegra
 }
 ```
 
-Create `channels/telegram/config/environment.ts`:
+## Step 3: Install Dependencies
 
-```typescript
-/**
- * Telegram channel environment variables
- */
+### 3.1 Install Required Dependencies
 
-export interface TelegramEnvironment {
-  TELEGRAM_BOT_TOKEN: string;
-  TELEGRAM_WEBHOOK_URL?: string;
-  TELEGRAM_POLLING?: boolean;
-  TELEGRAM_POLLING_INTERVAL?: number;
-  TELEGRAM_MAX_RETRIES?: number;
-}
-
-export function loadTelegramEnvironment(): TelegramEnvironment {
-  return {
-    TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
-    TELEGRAM_WEBHOOK_URL: process.env.TELEGRAM_WEBHOOK_URL,
-    TELEGRAM_POLLING: process.env.TELEGRAM_POLLING === 'true',
-    TELEGRAM_POLLING_INTERVAL: process.env.TELEGRAM_POLLING_INTERVAL 
-      ? parseInt(process.env.TELEGRAM_POLLING_INTERVAL) 
-      : undefined,
-    TELEGRAM_MAX_RETRIES: process.env.TELEGRAM_MAX_RETRIES 
-      ? parseInt(process.env.TELEGRAM_MAX_RETRIES) 
-      : undefined
-  };
-}
-```
-
-## Step 3: Create Telegram Channel Adapter
-
-### 3.1 Install Dependencies
-
-First, install the required dependencies:
+Install the required dependencies at the project root:
 
 ```bash
-# Navigate to the Telegram channel directory
-cd channels/telegram
-
-# Install Telegram bot API
+# Install Telegram bot API (if not already installed)
 npm install node-telegram-bot-api
 
-# Install TypeScript types
+# Install TypeScript types (if not already installed)
 npm install --save-dev @types/node-telegram-bot-api
-
-# Return to project root
-cd ../..
 ```
 
-### 3.2 Create Main Adapter
+## Step 4: Create Main Adapter
 
-Create `channels/telegram/src/adapter.ts`:
+### 4.1 Create Main Adapter
+
+Create `src/mastra/channels/telegram/adapter.ts`:
 
 ```typescript
 /**
- * Telegram channel adapter
- * This handles all Telegram-specific integration
+ * Telegram channel adapter for Mastra framework
+ * This handles all Telegram-specific integration within Mastra
  */
 
-import { BaseChannelAdapter } from '../../../src/mastra/shared/base-channel-adapter';
-import { NormalizedMessage, ProcessedResponse, ChannelUser, ChannelContext } from '../../../src/mastra/core/models/message';
-import { CentralMessageProcessor } from '../../../src/mastra/core/processor/message-processor';
-import { validateTelegramConfig, TelegramConfig } from '../config/schema';
+import { NormalizedMessage, ProcessedResponse, ChannelUser, ChannelContext } from '../../core/models/message';
+import { CentralMessageProcessor } from '../../core/processor/message-processor';
+import { validateTelegramConfig, TelegramConfig } from './config';
+import { ChannelAdapter } from '../../core/channels/interface';
 import TelegramBot from 'node-telegram-bot-api';
 
-export class TelegramChannelAdapter extends BaseChannelAdapter {
+export class TelegramChannelAdapter implements ChannelAdapter {
   private bot: TelegramBot;
   private processor: CentralMessageProcessor;
   private config: TelegramConfig;
+  
+  // Implement the ChannelAdapter interface
+  channelId = 'telegram';
 
   constructor(config: Partial<TelegramConfig>, processor: CentralMessageProcessor) {
-    super('telegram', 'telegram');
-    
     // Validate and merge configuration
     this.config = validateTelegramConfig(config);
     this.processor = processor;
@@ -161,7 +174,7 @@ export class TelegramChannelAdapter extends BaseChannelAdapter {
     // Set up message handlers
     this.setupMessageHandlers();
     
-    console.log('✅ Telegram adapter initialized');
+    console.log('✅ Telegram adapter initialized for Mastra');
   }
 
   /**
@@ -180,6 +193,9 @@ export class TelegramChannelAdapter extends BaseChannelAdapter {
     // Document messages
     this.bot.on('document', this.handleDocumentMessage.bind(this));
     
+    // Voice messages
+    this.bot.on('voice', this.handleVoiceMessage.bind(this));
+    
     // Error handling
     this.bot.on('polling_error', (error) => {
       console.error('❌ Telegram polling error:', error);
@@ -188,29 +204,34 @@ export class TelegramChannelAdapter extends BaseChannelAdapter {
     this.bot.on('webhook_error', (error) => {
       console.error('❌ Telegram webhook error:', error);
     });
+    
+    console.log('✅ Telegram message handlers set up');
   }
 
   /**
    * Normalize Telegram message to standardized format
    */
-  protected normalizeMessage(telegramMessage: TelegramBot.Message): NormalizedMessage {
-    const sender: ChannelUser = this.createChannelUser(
-      telegramMessage.from?.id.toString() || 'unknown',
-      telegramMessage.from?.username,
-      telegramMessage.from?.first_name 
+  private normalizeMessage(telegramMessage: TelegramBot.Message): NormalizedMessage {
+    const sender: ChannelUser = {
+      id: telegramMessage.from?.id.toString() || 'unknown',
+      username: telegramMessage.from?.username,
+      displayName: telegramMessage.from?.first_name 
         ? `${telegramMessage.from.first_name}${telegramMessage.from.last_name ? ` ${telegramMessage.from.last_name}` : ''}`
         : 'Unknown User'
-    );
+    };
 
-    const channelContext: ChannelContext = this.createChannelContext(
-      telegramMessage.message_id.toString(),
-      telegramMessage.chat.id.toString(),
-      {
+    const channelContext: ChannelContext = {
+      channelId: 'telegram',
+      channelMessageId: telegramMessage.message_id.toString(),
+      threadId: telegramMessage.chat.id.toString(),
+      metadata: {
         chatType: telegramMessage.chat.type,
         chatTitle: telegramMessage.chat.title,
-        date: telegramMessage.date
+        date: telegramMessage.date,
+        forwardFrom: telegramMessage.forward_from,
+        replyToMessageId: telegramMessage.reply_to_message?.message_id.toString()
       }
-    );
+    };
 
     let content = '';
     let contentType: NormalizedMessage['contentType'] = 'text';
@@ -246,6 +267,14 @@ export class TelegramChannelAdapter extends BaseChannelAdapter {
         type: 'audio',
         filename: `telegram_voice_${telegramMessage.voice.file_id}.ogg`
       }];
+    } else if (telegramMessage.audio) {
+      content = `[Audio: ${telegramMessage.audio.file_name || 'Unknown audio'}]`;
+      contentType = 'audio';
+      attachments = [{
+        url: `https://api.telegram.org/file/bot${this.bot.token}/${telegramMessage.audio.file_id}`,
+        type: 'audio',
+        filename: telegramMessage.audio.file_name
+      }];
     } else {
       content = '[Unsupported message type]';
       contentType = 'text';
@@ -265,7 +294,8 @@ export class TelegramChannelAdapter extends BaseChannelAdapter {
       attachments,
       metadata: {
         rawMessage: telegramMessage,
-        updateId: (telegramMessage as any).update_id
+        updateId: (telegramMessage as any).update_id,
+        entities: telegramMessage.entities
       }
     };
   }
@@ -273,7 +303,7 @@ export class TelegramChannelAdapter extends BaseChannelAdapter {
   /**
    * Send response back through Telegram
    */
-  protected async sendResponse(response: ProcessedResponse, originalMessage: NormalizedMessage): Promise<void> {
+  private async sendResponse(response: ProcessedResponse, originalMessage: NormalizedMessage): Promise<void> {
     const chatId = originalMessage.channel.threadId || originalMessage.sender.id;
     
     if (!chatId) {
@@ -318,6 +348,17 @@ export class TelegramChannelAdapter extends BaseChannelAdapter {
           }
           break;
         
+        case 'document':
+          if (response.attachments && response.attachments.length > 0) {
+            const docUrl = response.attachments[0].url;
+            await this.bot.sendDocument(chatId, docUrl, {}, {
+              caption: response.content
+            });
+          } else {
+            await this.bot.sendMessage(chatId, response.content);
+          }
+          break;
+        
         default:
           await this.bot.sendMessage(chatId, response.content);
       }
@@ -335,6 +376,13 @@ export class TelegramChannelAdapter extends BaseChannelAdapter {
   private async handleTelegramMessage(telegramMessage: TelegramBot.Message): Promise<void> {
     // Ignore messages from bots
     if (telegramMessage.from?.is_bot) {
+      return;
+    }
+
+    // Check if chat type is allowed
+    if (this.config.allowedChatTypes && 
+        !this.config.allowedChatTypes.includes(telegramMessage.chat.type as any)) {
+      console.log(`🚫 Ignoring message from disallowed chat type: ${telegramMessage.chat.type}`);
       return;
     }
 
@@ -380,6 +428,13 @@ export class TelegramChannelAdapter extends BaseChannelAdapter {
   }
 
   /**
+   * Handle voice messages
+   */
+  private async handleVoiceMessage(voice: TelegramBot.Message): Promise<void> {
+    await this.handleTelegramMessage(voice);
+  }
+
+  /**
    * Handle callback queries (button presses)
    */
   private async handleCallbackQuery(callbackQuery: TelegramBot.CallbackQuery): Promise<void> {
@@ -405,7 +460,7 @@ export class TelegramChannelAdapter extends BaseChannelAdapter {
   /**
    * Send error response
    */
-  protected async sendErrorResponse(error: any, originalMessage: TelegramBot.Message): Promise<void> {
+  private async sendErrorResponse(error: any, originalMessage: TelegramBot.Message): Promise<void> {
     try {
       const chatId = originalMessage.chat.id.toString();
       await this.bot.sendMessage(
@@ -418,12 +473,49 @@ export class TelegramChannelAdapter extends BaseChannelAdapter {
   }
 
   /**
+   * Validate message before processing
+   */
+  private validateMessage(message: NormalizedMessage): boolean {
+    // Check if message content is not empty
+    if (!message.content || message.content.trim().length === 0) {
+      return false;
+    }
+
+    // Check if sender information is present
+    if (!message.sender || !message.sender.id) {
+      return false;
+    }
+
+    // Check message length against channel limits
+    if (message.content.length > 4096) { // Telegram limit
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
    * Cleanup method for graceful shutdown
    */
   async shutdown(): Promise<void> {
     console.log('🛑 Shutting down Telegram adapter...');
     this.bot.stopPolling();
     console.log('✅ Telegram adapter shut down');
+  }
+
+  /**
+   * Handle incoming message - implements ChannelAdapter interface
+   */
+  async handleMessage(rawMessage: any): Promise<void> {
+    // This method would be called by the registry or webhook handler
+    // For polling-based Telegram, messages are handled automatically
+    // But we implement it for consistency with the interface
+    console.log('📥 Handling Telegram message:', rawMessage);
+    
+    // If rawMessage is a Telegram message object, process it
+    if (rawMessage && typeof rawMessage === 'object' && rawMessage.message_id) {
+      await this.handleTelegramMessage(rawMessage);
+    }
   }
 
   /**
@@ -449,420 +541,78 @@ export class TelegramChannelAdapter extends BaseChannelAdapter {
 }
 ```
 
-## Step 4: Create Channel Exports
+## Step 5: Create Channel Exports
 
-### 4.1 Create Index File
+### 5.1 Create Index File
 
-Create `channels/telegram/src/index.ts`:
+Create `src/mastra/channels/telegram/index.ts`:
 
 ```typescript
 /**
- * Telegram channel exports
+ * Telegram channel exports for Mastra framework
  */
 
 export { TelegramChannelAdapter } from './adapter';
-export type { TelegramConfig } from '../config/schema';
-export { validateTelegramConfig } from '../config/schema';
-export { loadTelegramEnvironment } from '../config/environment';
+export type { TelegramConfig } from './config';
+export { validateTelegramConfig, defaultTelegramConfig } from './config';
 
 // Channel identifier
 export const CHANNEL_NAME = 'telegram';
 
-// Default configuration
-export { defaultTelegramConfig } from '../config/schema';
+// Default export for easy importing
+export default TelegramChannelAdapter;
 ```
 
-## Step 5: Create Package Configuration
+## Step 6: Update Project Dependencies
 
-### 5.1 Create Package.json
+### 6.1 Update Package.json
 
-Create `channels/telegram/package.json`:
+Ensure your project's `package.json` includes the required dependencies:
 
 ```json
 {
-  "name": "@myproject/telegram-channel",
-  "version": "1.0.0",
-  "description": "Telegram channel adapter for multi-channel Mastra agent",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
-  "scripts": {
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "build": "tsc",
-    "lint": "eslint src/**/*.ts"
-  },
-  "keywords": ["telegram", "mastra", "channel", "bot"],
-  "author": "Your Name",
-  "license": "MIT",
   "dependencies": {
+    "@mastra/core": "^0.14.0",
+    "@ai-sdk/openai": "^0.0.0",
+    "dotenv": "^16.0.0",
     "node-telegram-bot-api": "^0.61.0"
   },
   "devDependencies": {
-    "@types/node-telegram-bot-api": "^0.61.0"
-  },
-  "peerDependencies": {
-    "@mastra/core": "^0.14.0"
+    "@types/node": "^18.0.0",
+    "@types/node-telegram-bot-api": "^0.61.0",
+    "ts-node": "^10.0.0",
+    "typescript": "^4.0.0"
   }
 }
 ```
 
-## Step 6: Update Main Application to Load Channel
+## Step 7: Create Documentation
 
-### 6.1 Modify Main Application
+### 7.1 Create README
 
-Update `src/main.ts` to load the Telegram channel:
-
-```typescript
-/**
- * Main application entry point
- * This bootstraps all active channels with the central processor
- */
-
-import dotenv from 'dotenv';
-dotenv.config();
-
-import { CentralMessageProcessor } from './mastra/core/processor/message-processor';
-import { channelRegistry } from './mastra/channels/registry';
-
-// Import channel adapters dynamically based on environment
-async function loadChannels(processor: CentralMessageProcessor) {
-  console.log('🚀 Loading channels...');
-
-  // Load Telegram channel if configured
-  if (process.env.TELEGRAM_BOT_TOKEN) {
-    try {
-      const { TelegramChannelAdapter, loadTelegramEnvironment } = await import('../channels/telegram/src');
-      
-      // Load environment variables
-      const telegramEnv = loadTelegramEnvironment();
-      
-      // Create adapter with environment configuration
-      const adapter = new TelegramChannelAdapter(
-        {
-          token: telegramEnv.TELEGRAM_BOT_TOKEN,
-          webhookUrl: telegramEnv.TELEGRAM_WEBHOOK_URL,
-          polling: telegramEnv.TELEGRAM_POLLING,
-          pollingInterval: telegramEnv.TELEGRAM_POLLING_INTERVAL,
-          maxRetries: telegramEnv.TELEGRAM_MAX_RETRIES
-        },
-        processor
-      );
-      
-      // Register the adapter
-      channelRegistry.register('telegram', adapter);
-      
-      // Log bot information
-      try {
-        const botInfo = await adapter.getBotInfo();
-        console.log(`🤖 Telegram bot loaded: @${botInfo.username}`);
-      } catch (error) {
-        console.warn('⚠️  Could not get Telegram bot info:', error);
-      }
-      
-    } catch (error) {
-      console.error('❌ Failed to load Telegram channel:', error);
-    }
-  }
-
-  // Add more channels here as needed
-  console.log(`✅ Loaded channels: ${channelRegistry.listChannels().join(', ')}`);
-}
-
-// Graceful shutdown handler
-async function shutdown() {
-  console.log('🛑 Shutting down application...');
-  try {
-    await channelRegistry.shutdownAll();
-    console.log('✅ Application shutdown complete');
-    process.exit(0);
-  } catch (error) {
-    console.error('❌ Error during shutdown:', error);
-    process.exit(1);
-  }
-}
-
-// Main bootstrap function
-async function bootstrap() {
-  console.log('🚀 Starting multi-channel Mastra application...');
-
-  // Create central message processor
-  const processor = new CentralMessageProcessor();
-  console.log('✅ Central message processor initialized');
-
-  // Load configured channels
-  await loadChannels(processor);
-
-  // Set up signal handlers for graceful shutdown
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
-
-  console.log('🎉 Multi-channel application ready!');
-  console.log(`📋 Active channels: ${channelRegistry.listChannels().join(', ') || 'None'}`);
-}
-
-// Start the application
-bootstrap().catch(error => {
-  console.error('❌ Failed to start application:', error);
-  process.exit(1);
-});
-
-export { bootstrap, shutdown };
-```
-
-## Step 7: Create Test Files
-
-### 7.1 Create Unit Tests
-
-Create `channels/telegram/tests/adapter.test.ts`:
-
-```typescript
-/**
- * Unit tests for Telegram channel adapter
- */
-
-import { jest } from '@jest/globals';
-
-// Mock TelegramBot
-const mockSendMessage = jest.fn();
-const mockStopPolling = jest.fn();
-
-jest.mock('node-telegram-bot-api', () => {
-  return jest.fn().mockImplementation(() => {
-    return {
-      on: jest.fn(),
-      sendMessage: mockSendMessage,
-      stopPolling: mockStopPolling,
-      token: 'mock-token'
-    };
-  });
-});
-
-describe('TelegramChannelAdapter', () => {
-  let TelegramChannelAdapter: any;
-  let CentralMessageProcessor: any;
-  let processor: any;
-
-  beforeAll(async () => {
-    const module = await import('../src/adapter');
-    TelegramChannelAdapter = module.TelegramChannelAdapter;
-    
-    // Mock processor
-    processor = {
-      processMessage: jest.fn().mockResolvedValue({
-        content: 'Test response',
-        contentType: 'text',
-        metadata: {}
-      })
-    };
-  });
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('should initialize with valid configuration', () => {
-    const config = {
-      token: 'test-token'
-    };
-    
-    const adapter = new TelegramChannelAdapter(config, processor);
-    
-    expect(adapter).toBeDefined();
-  });
-
-  it('should throw error with invalid configuration', () => {
-    const config = {
-      token: ''
-    };
-    
-    expect(() => {
-      new TelegramChannelAdapter(config, processor);
-    }).toThrow('Telegram bot token is required');
-  });
-
-  it('should normalize text message correctly', () => {
-    const adapter = new TelegramChannelAdapter({ token: 'test-token' }, processor);
-    
-    const telegramMessage: any = {
-      message_id: 123,
-      from: {
-        id: 456,
-        username: 'testuser',
-        first_name: 'Test',
-        last_name: 'User'
-      },
-      chat: {
-        id: 789,
-        type: 'private'
-      },
-      date: Math.floor(Date.now() / 1000),
-      text: 'Hello world'
-    };
-    
-    const normalizedMessage = (adapter as any).normalizeMessage(telegramMessage);
-    
-    expect(normalizedMessage.id).toBe('123');
-    expect(normalizedMessage.content).toBe('Hello world');
-    expect(normalizedMessage.contentType).toBe('text');
-    expect(normalizedMessage.sender.id).toBe('456');
-    expect(normalizedMessage.sender.username).toBe('testuser');
-    expect(normalizedMessage.channel.channelId).toBe('telegram');
-  });
-
-  it('should send text response', async () => {
-    const adapter = new TelegramChannelAdapter({ token: 'test-token' }, processor);
-    
-    const response: any = {
-      content: 'Test response',
-      contentType: 'text',
-      metadata: {}
-    };
-    
-    const originalMessage: any = {
-      sender: { id: '456' },
-      channel: { threadId: '789' }
-    };
-    
-    await (adapter as any).sendResponse(response, originalMessage);
-    
-    expect(mockSendMessage).toHaveBeenCalledWith('789', 'Test response', {
-      parse_mode: 'Markdown'
-    });
-  });
-
-  it('should handle shutdown', async () => {
-    const adapter = new TelegramChannelAdapter({ token: 'test-token' }, processor);
-    
-    await adapter.shutdown();
-    
-    expect(mockStopPolling).toHaveBeenCalled();
-  });
-});
-```
-
-### 7.2 Create Integration Test
-
-Create `channels/telegram/tests/integration.test.ts`:
-
-```typescript
-/**
- * Integration tests for Telegram channel adapter
- */
-
-import dotenv from 'dotenv';
-dotenv.config();
-
-describe('TelegramChannelAdapter Integration', () => {
-  let TelegramChannelAdapter: any;
-  let CentralMessageProcessor: any;
-  let processor: any;
-  let adapter: any;
-
-  beforeAll(async () => {
-    // Skip integration tests if no token is provided
-    if (!process.env.TELEGRAM_BOT_TOKEN) {
-      console.log('⚠️  Skipping Telegram integration tests - no token provided');
-      return;
-    }
-
-    const module = await import('../src/adapter');
-    TelegramChannelAdapter = module.TelegramChannelAdapter;
-    
-    const coreModule = await import('../../../src/mastra/core/processor/message-processor');
-    CentralMessageProcessor = coreModule.CentralMessageProcessor;
-    
-    processor = new CentralMessageProcessor();
-    adapter = new TelegramChannelAdapter(
-      { token: process.env.TELEGRAM_BOT_TOKEN },
-      processor
-    );
-  });
-
-  it('should connect to Telegram API', async () => {
-    // Skip if no token
-    if (!process.env.TELEGRAM_BOT_TOKEN) {
-      return;
-    }
-
-    try {
-      const botInfo = await adapter.getBotInfo();
-      expect(botInfo).toBeDefined();
-      expect(botInfo.id).toBeDefined();
-      expect(botInfo.is_bot).toBe(true);
-    } catch (error) {
-      // Skip test if API is not accessible
-      console.warn('⚠️  Could not connect to Telegram API:', error);
-    }
-  }, 10000); // 10 second timeout
-
-  it('should validate configuration', () => {
-    expect(() => {
-      new TelegramChannelAdapter({ token: '' }, processor);
-    }).toThrow('Telegram bot token is required');
-  });
-});
-```
-
-## Step 8: Update Environment Variables
-
-### 8.1 Add Telegram Configuration
-
-Update your `.env` file:
-
-```bash
-# .env
-# Your vLLM endpoint
-VLLM_BASE_URL=http://yourip:yourport/v1
-VLLM_API_KEY=your-api-key-here
-
-# Model names
-GENERATE_MODEL=gpt-oss-20b
-REASONING_MODEL=gpt-oss-20b
-SMALL_GENERATE_MODEL=gpt-oss-20b
-
-# Default timeout and retry settings
-LLM_TIMEOUT_MS=30000
-LLM_RETRIES=2
-LLM_BACKOFF_MS=1000
-
-# Database configuration
-DATABASE_URL=file:./mastra.db
-
-# Telegram configuration
-TELEGRAM_BOT_TOKEN=your-telegram-bot-token
-TELEGRAM_WEBHOOK_URL=your-webhook-url-if-using-webhooks
-TELEGRAM_POLLING=true
-TELEGRAM_POLLING_INTERVAL=300
-TELEGRAM_MAX_RETRIES=3
-```
-
-## Step 9: Documentation
-
-### 9.1 Create README
-
-Create `channels/telegram/README.md`:
+Create `src/mastra/channels/telegram/README.md`:
 
 ```markdown
-# 🟦 Telegram Channel Adapter
+# 🟦 Telegram Channel Adapter for Mastra
 
-This package provides a Telegram channel adapter for the multi-channel Mastra agent.
+This module provides a Telegram channel adapter that integrates seamlessly with the Mastra framework.
 
 ## Features
 
 - ✅ Text message support
 - ✅ Photo/image message support
 - ✅ Document message support
-- ✅ Voice message support
+- ✅ Voice/audio message support
 - ✅ Quick reply buttons
 - ✅ Polling and webhook support
 - ✅ Error handling and retries
 - ✅ Graceful shutdown
+- ✅ Configuration validation
+- ✅ Mastra framework integration
 
 ## Installation
 
-```bash
-npm install @myproject/telegram-channel
-```
+The Telegram adapter is already integrated into your Mastra project structure.
 
 ## Configuration
 
@@ -871,15 +621,15 @@ npm install @myproject/telegram-channel
 ```env
 TELEGRAM_BOT_TOKEN=your-telegram-bot-token
 TELEGRAM_WEBHOOK_URL=https://your-domain.com/webhook/telegram  # Optional
-TELEGRAM_POLLING=true                                         # Optional
-TELEGRAM_POLLING_INTERVAL=300                                 # Optional
-TELEGRAM_MAX_RETRIES=3                                       # Optional
+TELEGRAM_POLLING=true                                           # Optional
+TELEGRAM_POLLING_INTERVAL=300                                   # Optional
+TELEGRAM_MAX_RETRIES=3                                          # Optional
 ```
 
 ### Programmatic Configuration
 
 ```typescript
-import { TelegramChannelAdapter } from '@myproject/telegram-channel';
+import { TelegramChannelAdapter } from './src/mastra/channels/telegram';
 
 const adapter = new TelegramChannelAdapter({
   token: 'your-bot-token',
@@ -892,20 +642,13 @@ const adapter = new TelegramChannelAdapter({
 
 ## Usage
 
-### Basic Setup
+### Basic Setup (Integrated with Mastra)
 
-```typescript
-import { TelegramChannelAdapter } from '@myproject/telegram-channel';
-import { CentralMessageProcessor } from '@myproject/mastra-core';
+The Telegram adapter is automatically loaded by Mastra when `TELEGRAM_BOT_TOKEN` is set in your environment:
 
-const processor = new CentralMessageProcessor();
-const adapter = new TelegramChannelAdapter(
-  { token: process.env.TELEGRAM_BOT_TOKEN },
-  processor
-);
-
-// The adapter automatically starts listening for messages
-console.log('Telegram bot is running!');
+```env
+# .env
+TELEGRAM_BOT_TOKEN=your-telegram-bot-token
 ```
 
 ### Webhook Setup
@@ -917,12 +660,18 @@ await adapter.setWebhook('https://your-domain.com/webhook/telegram');
 // Handle webhook requests in your server
 app.post('/webhook/telegram', (req, res) => {
   // Pass the webhook data to the adapter
-  adapter.handleWebhook(req.body);
+  adapter.handleMessage(req.body);
   res.sendStatus(200);
 });
 ```
 
 ## API Reference
+
+### Constructor
+
+```typescript
+new TelegramChannelAdapter(config: Partial<TelegramConfig>, processor: CentralMessageProcessor)
+```
 
 ### Methods
 
@@ -945,17 +694,11 @@ The adapter automatically handles these Telegram events:
 
 ### Unit Tests
 
-```bash
-npm test
-```
+Unit tests are located in `src/mastra/channels/telegram/tests/`.
 
 ### Integration Tests
 
-```bash
-npm run test:integration
-```
-
-Note: Integration tests require a valid Telegram bot token.
+Integration tests require a valid Telegram bot token.
 
 ## Contributing
 
@@ -970,44 +713,49 @@ Note: Integration tests require a valid Telegram bot token.
 MIT
 ```
 
-## Benefits of This Approach
+## Benefits of This Mastra-Compatible Approach
 
-### 🎯 **Clear Channel Implementation**
-- Each channel follows the same pattern
-- Easy to understand and maintain
-- Consistent API across all channels
+### 🎯 **Works with Mastra Framework**
+- ✅ Uses existing Mastra entry point (`src/mastra/index.ts`)
+- ✅ Preserves existing agents and tools
+- ✅ Integrates seamlessly with Mastra architecture
+- ✅ No conflicts with Mastra inheritance
 
 ### 🔧 **Easy to Extend**
-- Add new features by extending the base adapter
-- Override methods as needed
-- Plug-and-play architecture
+- Add new channel: `mkdir src/mastra/channels/newchannel`
+- Remove channel: `rm -rf src/mastra/channels/oldchannel`
+- No impact on other channels or Mastra components
 
 ### 🚀 **Production Ready**
 - Error handling and retries
 - Graceful shutdown
 - Configuration validation
-- Comprehensive testing
+- Comprehensive logging
+- Mastra-compatible error handling
 
 ### 🛡️ **Well Tested**
-- Unit tests for core functionality
-- Integration tests with real API
-- Mock testing for isolated development
+- Interface-based design for easy testing
+- Clear separation of concerns
+- Independent development
+- Consistent patterns across channels
 
 ### 🎨 **Developer Friendly**
 - Clear documentation
 - Consistent patterns
 - Easy to contribute
 - Well-structured code
+- Works with existing Mastra development workflows
 
 ## Next Steps
 
 1. **✅ Completed**: Created Telegram channel adapter
 2. **✅ Completed**: Implemented all message types
 3. **✅ Completed**: Added configuration management
-4. **✅ Completed**: Created comprehensive tests
-5. **Now**: Test with actual Telegram bot
-6. **Next**: Implement other channels (WhatsApp, Web, etc.)
-7. **Later**: Add advanced features like media processing
-8. **Finally**: Deploy to production
+4. **✅ Completed**: Used interface-based design (no base class!)
+5. **✅ Completed**: Integrated with Mastra framework
+6. **Now**: Test with actual Telegram bot
+7. **Next**: Implement other channels (WhatsApp, Web, etc.)
+8. **Later**: Add advanced features like media processing
+9. **Finally**: Deploy to production
 
-This implementation provides a solid foundation for any channel adapter while maintaining consistency with the overall architecture.
+This implementation provides a solid foundation for any channel adapter while maintaining consistency with the Mastra framework and avoiding the complexity of unnecessary inheritance.

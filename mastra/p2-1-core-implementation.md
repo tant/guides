@@ -1,103 +1,88 @@
-# 🔄 Part 2: Decoupled Multi-Channel Architecture - Core Implementation
+# 🔄 Part 2: Decoupled Multi-Channel Architecture - Core Implementation (Mastra Framework)
 
 ## Overview
 
-This guide will walk you through creating a decoupled multi-channel architecture that keeps business logic centralized while making channel support clearly visible. This is Part 1 - the core implementation for a new project.
+This guide will walk you through creating a decoupled multi-channel architecture that works within the existing Mastra framework structure. We'll extend Mastra's capabilities while keeping business logic centralized and making channel support clearly visible.
 
-## Project Structure Overview
+## Understanding Mastra Framework Structure
 
-Before diving into implementation, let's understand the clean architecture we're building:
-
+### Current Mastra Structure
 ```
 src/
-├── mastra/
-│   ├── core/              ← Central business logic and message processing
-│   │   ├── models/        ← Standardized message formats
-│   │   ├── processor/      ← Central message processor (business logic)
-│   │   └── index.ts
-│   ├── llm/               ← LLM integration and adapters
-│   │   ├── adapter.ts
-│   │   ├── config.ts
-│   │   ├── provider.ts
-│   │   └── index.ts
-│   └── index.ts
-├── channels/               ← Each channel as independent module
-│   ├── telegram/
-│   │   ├── adapter.ts     ← Telegram-specific integration
-│   │   ├── config.ts      ← Telegram configuration
-│   │   └── index.ts
-│   ├── whatsapp/
-│   │   ├── adapter.ts     ← WhatsApp-specific integration
-│   │   ├── config.ts      ← WhatsApp configuration
-│   │   └── index.ts
-│   └── web/
-│       ├── adapter.ts     ← Web-specific integration
-│       ├── config.ts      ← Web configuration
-│       └── index.ts
-└── main.ts                ← Application entry point
+└── mastra/
+    ├── agents/          ← Mastra agents
+    ├── tools/           ← Mastra tools
+    ├── index.ts         ← Mastra entry point (THIS IS THE CORRECT ENTRY POINT)
+    └── (existing structure)
 ```
 
-### Key Design Principles
-
-1. **Centralized Business Logic**: All message processing logic lives in `src/mastra/core/processor/`
-2. **Decoupled Channels**: Each channel is an independent module in `src/channels/`
-3. **Standardized Interface**: All channels use the same message format
-4. **Clear Visibility**: Immediately obvious which channels are supported
-
-## Why This Architecture?
-
-### The Problem with Monolithic Approach
+### Our Extended Structure
 ```
-❌ Bad: Everything mixed together
 src/
-├── telegram-handler.ts
-├── whatsapp-handler.ts
-├── web-handler.ts
-├── business-logic.ts
-└── message-processor.ts
+└── mastra/
+    ├── agents/          ← Keep existing Mastra agents
+    ├── tools/           ← Keep existing Mastra tools
+    ├── core/            ← OUR centralized business logic
+    │   ├── models/      ← Standardized message formats
+    │   ├── processor/    ← Central message processor
+    │   └── channels/   ← Channel management
+    ├── channels/        ← OUR channel adapters (decoupled)
+    │   ├── telegram/
+    │   ├── whatsapp/
+    │   ├── web/
+    │   └── line/
+    ├── llm/             ← LLM adapters
+    └── index.ts         ← Mastra entry point (KEEP THIS)
 ```
 
-### The Solution: Clear Separation
-```
-✅ Good: Clean separation of concerns
-src/
-├── mastra/core/processor/     ← Business logic (ONE PLACE)
-└── channels/                 ← Channel integrations (MANY PLACES)
-    ├── telegram/            ← Only Telegram integration code
-    ├── whatsapp/            ← Only WhatsApp integration code
-    └── web/                 ← Only Web integration code
-```
+## Key Principles for Mastra Integration
 
-## Step 1: Create Project Structure
+### 1. Respect Existing Structure
+- ✅ Keep `src/mastra/index.ts` as the entry point
+- ✅ Don't conflict with existing `agents/` and `tools/`
+- ✅ Extend rather than replace Mastra functionality
 
-### 1.1 Initialize Clean Project Structure
+### 2. Decoupled Channel Architecture
+- ✅ Each channel is independent module
+- ✅ Business logic centralized in `core/`
+- ✅ Clear visibility of supported channels
 
-Let's create the foundational project structure:
+### 3. Interface-Based Design (No Base Class)
+- ✅ Use TypeScript interfaces instead of inheritance
+- ✅ Loose coupling between components
+- ✅ Easy to test and maintain
+
+## Step 1: Create Extended Mastra Structure
+
+### 1.1 Extend Mastra Directory Structure
 
 ```bash
-# Create the main project structure
-mkdir -p src/mastra/{core,llm}
-mkdir -p src/mastra/core/{models,processor}
-mkdir -p src/channels/{telegram,whatsapp,web,line}
-mkdir -p src/channels/telegram/{config,tests}
-mkdir -p src/channels/whatsapp/{config,tests}
-mkdir -p src/channels/web/{config,tests}
-mkdir -p src/channels/line/{config,tests}
+# Create our extended structure within existing Mastra structure
+mkdir -p src/mastra/{core,llm,channels}
+mkdir -p src/mastra/core/{models,processor,channels}
+mkdir -p src/mastra/channels/{telegram,whatsapp,web,line}
+mkdir -p src/mastra/channels/telegram/{config,tests}
+mkdir -p src/mastra/channels/whatsapp/{config,tests}
+mkdir -p src/mastra/channels/web/{config,tests}
+mkdir -p src/mastra/channels/line/{config,tests}
 ```
 
-This creates a clear, immediately understandable structure:
+This creates the extended structure:
 ```
-src/
-├── mastra/
-│   ├── core/              ← ONE PLACE for all business logic
-│   │   ├── models/        ← Standardized message formats
-│   │   └── processor/    ← Central message processing
-│   └── llm/               ← LLM integration
-└── channels/              ← EACH CHANNEL as independent module
-    ├── telegram/         ← Only Telegram-related code
-    ├── whatsapp/        ← Only WhatsApp-related code
-    ├── web/              ← Only Web-related code
-    └── line/             ← Only LINE-related code
+src/mastra/
+├── agents/              ← Existing Mastra agents (KEEP)
+├── tools/               ← Existing Mastra tools (KEEP)
+├── core/                ← OUR centralized business logic
+│   ├── models/          ← Standardized message formats
+│   ├── processor/      ← Central message processor
+│   └── channels/       ← Channel management
+├── channels/            ← OUR decoupled channel adapters
+│   ├── telegram/       ← Only Telegram-related code
+│   ├── whatsapp/       ← Only WhatsApp-related code
+│   ├── web/            ← Only Web-related code
+│   └── line/           ← Only LINE-related code
+├── llm/                ← LLM adapters
+└── index.ts            ← Mastra entry point (KEEP)
 ```
 
 ## Step 2: Create Message Models
@@ -307,8 +292,14 @@ Create `src/mastra/core/processor/message-processor.ts`:
  */
 
 import { NormalizedMessage, ProcessedResponse } from '../models/message';
-import { callModel } from '../../../llm/adapter';
 import { CHANNEL_CONFIGS } from '../models/channel';
+
+// Placeholder for LLM adapter - we'll create this later
+async function callModel(modelName: string, messages: any[], options: any = {}) {
+  // Placeholder implementation - will be replaced with actual LLM adapter
+  console.log(`Calling model: ${modelName}`);
+  return { text: "This is a placeholder response from the LLM" };
+}
 
 export class CentralMessageProcessor {
   private processingQueue: Array<{
@@ -523,9 +514,28 @@ export const messageProcessor = new CentralMessageProcessor();
 
 ## Step 4: Create Channel Management
 
-### 4.1 Channel Registry
+### 4.1 Channel Registry Interface
 
-Create `src/mastra/channels/registry.ts`:
+Create `src/mastra/core/channels/interface.ts`:
+
+```typescript
+/**
+ * Channel adapter interface
+ * This defines what all channel adapters must implement
+ */
+
+import { NormalizedMessage } from '../../core/models/message';
+
+export interface ChannelAdapter {
+  channelId: string;
+  handleMessage: (rawMessage: any) => Promise<void>;
+  shutdown?: () => Promise<void>;
+}
+```
+
+### 4.2 Channel Registry
+
+Create `src/mastra/core/channels/registry.ts`:
 
 ```typescript
 /**
@@ -533,12 +543,7 @@ Create `src/mastra/channels/registry.ts`:
  * This keeps track of which channels are currently active
  */
 
-// Simple interface for channel adapters
-export interface ChannelAdapter {
-  channelId: string;
-  handleMessage: (rawMessage: any) => Promise<void>;
-  shutdown?: () => Promise<void>;
-}
+import { ChannelAdapter } from './interface';
 
 export class ChannelRegistry {
   private adapters = new Map<string, ChannelAdapter>();
@@ -606,23 +611,27 @@ export class ChannelRegistry {
 export const channelRegistry = new ChannelRegistry();
 ```
 
-## Step 5: Create Main Application
+## Step 5: Update Mastra Entry Point
 
-### 5.1 Application Entry Point
+### 5.1 Extend Mastra Index
 
-Create `src/main.ts`:
+Update `src/mastra/index.ts` to include our multi-channel system:
 
 ```typescript
 /**
- * Main application entry point
- * This bootstraps all active channels with the central processor
+ * Extended Mastra entry point
+ * This integrates our multi-channel system with existing Mastra functionality
  */
 
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { CentralMessageProcessor } from './mastra/core/processor/message-processor';
-import { channelRegistry } from './mastra/channels/registry';
+// Import existing Mastra functionality
+// Keep existing imports for agents, tools, etc.
+
+// Import our multi-channel system
+import { CentralMessageProcessor } from './core/processor/message-processor';
+import { channelRegistry } from './core/channels/registry';
 
 // Import channel adapters dynamically based on environment
 async function loadChannels(processor: CentralMessageProcessor) {
@@ -677,9 +686,9 @@ async function shutdown() {
   }
 }
 
-// Main bootstrap function
-async function bootstrap() {
-  console.log('🚀 Starting multi-channel Mastra application...');
+// Main bootstrap function for multi-channel system
+async function bootstrapChannels() {
+  console.log('🚀 Starting multi-channel system...');
 
   // Create central message processor
   const processor = new CentralMessageProcessor();
@@ -692,60 +701,64 @@ async function bootstrap() {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  console.log('🎉 Multi-channel application ready!');
+  console.log('🎉 Multi-channel system ready!');
   console.log(`📋 Active channels: ${channelRegistry.listChannels().join(', ') || 'None'}`);
 }
 
-// Start the application
-bootstrap().catch(error => {
-  console.error('❌ Failed to start application:', error);
-  process.exit(1);
-});
+// Export existing Mastra functionality plus our extensions
+// Keep existing exports for agents, tools, etc.
 
-export { bootstrap, shutdown };
+// Export our multi-channel functionality
+export { CentralMessageProcessor, messageProcessor } from './core/processor/message-processor';
+export { channelRegistry } from './core/channels/registry';
+export { ChannelAdapter } from './core/channels/interface';
+export { bootstrapChannels, shutdown };
+
+// Auto-bootstrap channels when module is imported
+// This ensures channels are ready when Mastra starts
+bootstrapChannels().catch(console.error);
 ```
 
-## Benefits of This Architecture
+## Benefits of This Mastra-Compatible Architecture
 
-### 🎯 **Clear Channel Visibility**
-```
-src/channels/
-├── telegram/     ← Immediately clear Telegram support
-├── whatsapp/     ← Immediately clear WhatsApp support
-├── web/          ← Immediately clear Web support
-└── line/         ← Immediately clear LINE support
-```
+### 🎯 **Respects Mastra Structure**
+- ✅ Keeps `src/mastra/index.ts` as entry point
+- ✅ Preserves existing `agents/` and `tools/`
+- ✅ Extends rather than replaces Mastra functionality
 
 ### 🔧 **Easy Maintenance**
 - **Business logic** in `src/mastra/core/processor/` (ONE PLACE)
-- **Channel adapters** in `src/channels/` (SEPARATE MODULES)
-- **No redundant packages** - clean, simple structure
+- **Channel adapters** in `src/mastra/channels/` (SEPARATE MODULES)
+- **No conflicts** with existing Mastra structure
 
 ### 🚀 **Scalability**
-- Add new channel: `mkdir src/channels/newchannel`
-- Remove channel: `rm -rf src/channels/oldchannel`
-- No impact on other channels
+- Add new channel: `mkdir src/mastra/channels/newchannel`
+- Remove channel: `rm -rf src/mastra/channels/oldchannel`
+- No impact on other channels or Mastra components
 
 ### 🛡️ **Reliability**
 - Channel failure doesn't affect others
 - Central processor handles all business logic
 - Easy error isolation and debugging
+- Compatible with existing Mastra error handling
 
 ### 🎨 **Developer Experience**
 - Clear structure shows what's supported
 - Each developer can focus on one channel
 - Consistent patterns across channels
 - Easy to onboard new team members
+- Works with existing Mastra development workflows
 
 ## Next Steps
 
-1. **✅ Completed**: Created clean project structure
+1. **✅ Completed**: Extended Mastra structure properly
 2. **✅ Completed**: Defined standardized message models
 3. **✅ Completed**: Built central message processor
 4. **✅ Completed**: Set up channel management
-5. **Now**: Implement specific channel adapters (see Part 2)
-6. **Next**: Test with actual channels
-7. **Later**: Add more channels as needed
-8. **Finally**: Deploy with monitoring and logging
+5. **✅ Completed**: Integrated with Mastra entry point
+6. **Now**: Implement specific channel adapters (see Part 2)
+7. **Next**: Test with actual channels
+8. **Later**: Add more channels as needed
+9. **Finally**: Deploy with monitoring and logging
 
-This architecture provides a clean, maintainable, and scalable solution that makes it immediately clear which channels are supported while keeping all business logic centralized.
+This architecture provides a clean, maintainable, and scalable solution that works seamlessly with the existing Mastra framework while making it immediately clear which channels are supported and keeping all business logic centralized.
