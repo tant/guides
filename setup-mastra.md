@@ -2,41 +2,11 @@
 
 ## Overview
 
-This comprehensive guide will walk you through creating a scalable Mastra agent system with centralized LLM configuration. Even if you're new to Mastra, you'll be able to follow along and understand each step.
+This comprehensive guide will walk you through creating a scalable Mastra agent system with centralized LLM configuration using the proven architecture from your current working codebase.
 
+## Project Setup Using Mastra CLI
 
-
-## Step 1: Understanding the Problem
-
-### Why Centralized LLM Configuration?
-
-**Current Problem:**
-```
-Agent 1 → Creates its own LLM provider
-Agent 2 → Creates its own LLM provider  
-Agent 3 → Creates its own LLM provider
-```
-
-**Problems with this approach:**
-- Code duplication
-- Hard to maintain (change config in 10 places)
-- Inconsistent configurations
-- Difficult to test
-
-**Solution:**
-```
-All Agents → Shared LLM Provider ← Centralized Configuration
-```
-
-**Benefits:**
-- One source of truth
-- Easy maintenance
-- Consistent behavior
-- Better testability
-
-## Step 2: Project Setup Using Mastra CLI
-
-### 2.1 Create Project Using Mastra CLI
+### Create Project Using Mastra CLI
 
 Instead of manually creating the folder structure, use the Mastra CLI to set up your project. The CLI will create the project structure and initialize everything for you:
 
@@ -105,7 +75,7 @@ Done in 2.4s using pnpm v10.14.0
 ├────────────────────────────────────────────────────────────╯
 ```
 
-### 2.2 Open Project in Code Editor
+### Open Project in Code Editor
 
 After the CLI finishes, simply navigate to your project directory and open it in your code editor:
 
@@ -119,9 +89,9 @@ code .
 
 That's it! The Mastra CLI has already created the project structure and initialized everything for you. You're ready to start coding.
 
-## Step 3: Create Environment Configuration
+## Create Environment Configuration
 
-### 3.1 Create .env File
+### Create .env File
 
 Create `.env` file in your project root:
 
@@ -145,15 +115,16 @@ LLM_BACKOFF_MS=1000
 DATABASE_URL=file:./mastra.db
 ```
 
-### 3.2 Install dotenv
+### Install dotenv
 
 ```bash
-npm install dotenv
+# If not already installed by Mastra CLI
+pnpm add dotenv
 ```
 
-## Step 4: Create Centralized LLM Configuration
+## Create Centralized LLM Configuration
 
-### 4.1 What We're Building
+### What We're Building
 
 We're creating a single configuration file that all agents will use:
 
@@ -162,7 +133,7 @@ src/mastra/llm/
 └── config.ts    ← This file
 ```
 
-### 4.2 Create the Configuration File
+### Create the Configuration File
 
 Create `src/mastra/llm/config.ts`:
 
@@ -215,24 +186,16 @@ export const defaultLLMConfig: LLMConfig = {
   
   // Default settings - read from environment with number parsing
   default: {
-    timeoutMs: parseInt(process.env.LLM_TIMEOUT_MS || '15000'),
+    timeoutMs: parseInt(process.env.LLLM_TIMEOUT_MS || '15000'),
     retries: parseInt(process.env.LLM_RETRIES || '1'),
     backoffMs: parseInt(process.env.LLM_BACKOFF_MS || '500')
   }
 };
 ```
 
-### 4.3 What This Does
+## Create Centralized LLM Provider
 
-This configuration file:
-1. **Defines the structure** of our LLM configuration
-2. **Provides default values** from environment variables
-3. **Has fallback values** if environment variables aren't set
-4. **Is used by all agents** instead of each creating their own
-
-## Step 5: Create Centralized LLM Provider
-
-### 5.1 What We're Building
+### What We're Building
 
 We're creating a single provider that all agents will use:
 
@@ -242,7 +205,7 @@ src/mastra/llm/
 └── provider.ts   ← This file
 ```
 
-### 5.2 Create the Provider File
+### Create the Provider File
 
 Create `src/mastra/llm/provider.ts`:
 
@@ -290,53 +253,42 @@ export const llmProviderFactory = (modelName: string) => {
 };
 ```
 
-### 5.3 What This Does
+## Enhance the Existing LLM Adapter
 
-This provider file:
-1. **Creates a factory function** to make LLM providers
-2. **Provides a default provider instance** for all agents
-3. **Creates a model factory** to get specific models
-4. **Uses our centralized configuration**
+### What We're Building
 
-## Step 6: Create Enhanced LLM Adapter
-
-### 6.1 What We're Building
-
-We're creating an enhanced adapter with better error handling:
+We're improving the existing LLM adapter with better error handling and documentation:
 
 ```
 src/mastra/llm/
 ├── config.ts     ← Already created
 ├── provider.ts   ← Already created
-└── adapter.ts    ← This file
+└── adapter.ts    ← This file (enhanced version)
 ```
 
-### 6.2 Create the Adapter File
+### Update the Adapter File
 
-Create `src/mastra/llm/adapter.ts`:
+Update `src/mastra/llm/adapter.ts` with enhanced features:
 
 ```typescript
 /**
- * This file contains an enhanced LLM adapter with better error handling,
- * timeout management, and retry logic.
+ * Enhanced LLM adapter with improved error handling and documentation.
+ * This builds upon the existing working adapter with better features.
  */
 
 // Import types from Mastra
 import type { CoreMessage } from "@mastra/core";
 
-// Import our provider
-import { llmProviderFactory } from "./provider";
-
-// Import our configuration
-import { defaultLLMConfig, type LLMConfig } from "./config";
+// Import our provider factory (this should match your existing import)
+import { llmProviderFactory } from "./provider"; // Or from your agent file
 
 /**
- * Options for LLM calls
+ * Options for LLM calls with better defaults
  */
 export type LLMCallOptions = {
-  timeoutMs?: number;    // Custom timeout
-  retries?: number;      // Custom retry count
-  backoffMs?: number;    // Custom backoff time
+  timeoutMs?: number;    // Custom timeout (default: 15000ms)
+  retries?: number;      // Custom retry count (default: 1)
+  backoffMs?: number;    // Custom backoff time (default: 500ms)
 };
 
 /**
@@ -413,42 +365,29 @@ function timeoutPromise<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 /**
  * Main function to call LLM models with enhanced features
- * This is what you'll use instead of calling the provider directly
+ * This is the improved version of your existing callModel function
  */
 export async function callModel(
-  messages: CoreMessage[],                              // The conversation messages
-  taskType: 'generate' | 'reasoning' | 'small' | 'default' = 'default',  // Task type
-  opts: Partial<LLMCallOptions> = {},                   // Custom options
-  config: Partial<LLMConfig> = {}                       // Custom config
+  modelName: string,              // Model name to call
+  messages: CoreMessage[],        // The conversation messages
+  opts: LLMCallOptions = {}       // Custom options
 ): Promise<{ text: string; raw: unknown }> {
-  // Merge configuration
-  const mergedConfig = { ...defaultLLMConfig, ...config };
+  // Extract options with defaults (matching your existing logic)
+  const { timeoutMs = 15000, retries = 1, backoffMs = 500 } = opts;
   
-  // Select the appropriate model based on task type
-  const modelName = taskType === 'default' 
-    ? mergedConfig.models.generate 
-    : mergedConfig.models[taskType];
-    
-  // Extract options with defaults
-  const { 
-    timeoutMs = mergedConfig.default.timeoutMs, 
-    retries = mergedConfig.default.retries, 
-    backoffMs = mergedConfig.default.backoffMs 
-  } = opts;
-  
-  // Get the client from our provider
+  // Get the client from our provider (using the same pattern as your code)
   const client = llmProviderFactory(modelName) as unknown;
-
-  // Validate inputs
+  
+  // Validate inputs (added for better error handling)
   if (!modelName || !messages.length) {
     throw new Error("Model name and messages are required");
   }
 
-  // Retry logic
+  // Retry logic (same as your existing code)
   let attempt = 0;
   while (attempt <= retries) {
     try {
-      // This is the actual call to the LLM
+      // This is the actual call to the LLM (same as your existing code)
       const run = async () => {
         if (isProviderClient(client)) {
           if (typeof client.generate === "function") {
@@ -474,18 +413,18 @@ export async function callModel(
         );
       };
 
-      // Execute with timeout
+      // Execute with timeout (same as your existing code)
       const resp = await timeoutPromise(run(), timeoutMs);
       return { text: extractText(resp), raw: resp };
     } catch (error) {
       attempt++;
 
-      // If we've exhausted retries, throw the error
+      // If we've exhausted retries, throw the error (same as your existing code)
       if (attempt > retries) {
         throw error;
       }
 
-      // Wait before retrying with exponential backoff
+      // Wait before retrying with exponential backoff (same as your existing code)
       await new Promise((resolve) => setTimeout(resolve, backoffMs * attempt));
     }
   }
@@ -495,18 +434,9 @@ export async function callModel(
 }
 ```
 
-### 6.3 What This Does
+## Create Centralized Exports
 
-This adapter file:
-1. **Provides enhanced error handling** with timeouts and retries
-2. **Handles different response formats** from various models
-3. **Supports task-specific model selection**
-4. **Uses our centralized configuration**
-5. **Can be used by any agent** without duplication
-
-## Step 7: Create Centralized Exports
-
-### 7.1 What We're Building
+### What We're Building
 
 We're creating a single point to export all LLM functionality:
 
@@ -518,7 +448,7 @@ src/mastra/llm/
 └── index.ts      ← This file
 ```
 
-### 7.2 Create the Index File
+### Create the Index File
 
 Create `src/mastra/llm/index.ts`:
 
@@ -542,112 +472,53 @@ export type { LLMConfig } from './config';
 export type { LLMCallOptions } from './adapter';
 ```
 
-## Step 8: Create Your First Agent
+## Update Your Agent to Use Centralized LLM
 
-### 8.1 What We're Building
+### What We're Building
 
-We're creating an agent that uses our centralized LLM configuration:
+Update your existing agent to use the centralized LLM configuration:
 
 ```
 src/mastra/agents/
-├── my-first-agent.ts    ← This file
-└── index.ts            ← Next file
+└── your-existing-agent.ts    ← Update this file
 ```
 
-### 8.2 Create the Agent File
+### Update Your Agent File
 
-Create `src/mastra/agents/my-first-agent.ts`:
+Update your existing agent file (e.g., `src/mastra/agents/index.ts` or similar):
 
 ```typescript
 /**
- * This is your first Mastra agent using centralized LLM configuration.
+ * Updated agent using centralized LLM configuration
  */
 
-// Import Mastra components
-import { Agent } from '@mastra/core/agent';
-import { LibSQLStore } from '@mastra/libsql';
-import { Memory } from '@mastra/memory';
+// Import required Mastra components (keep your existing imports)
+import { Agent } from "@mastra/core/agent";
+// ... other imports
 
 // Import our centralized LLM provider and configuration
 import { llmProviderFactory } from '../llm/provider';
 import { defaultLLMConfig } from '../llm/config';
 
-/**
- * Define the agent's personality and instructions
- * This tells the agent how to behave and what it can do
- */
-const AGENT_PERSONALITY = `
-# Helpful Assistant - Personality Profile
+// Keep your existing llmFactory if needed for backward compatibility
+// export const llmFactory = llmProviderFactory;
 
-## Overall Character
-You are a helpful, friendly, and knowledgeable assistant. You're like a tech-savvy friend who's always excited to help users with their questions.
-
-## Communication Style
-- **Tone**: Warm, approachable, and knowledgeable
-- **Language**: Clear, conversational English
-- **Pacing**: Not too rushed, allows users to absorb information
-
-## Key Personality Traits
-1. **Helpful & Supportive**: You actively listen to user concerns and show understanding
-2. **Knowledgeable but Humble**: You're well-informed but don't boast
-3. **Patient & Persistent**: You're patient with users who need more explanation time
-4. **Professional & Tactful**: You maintain professional boundaries at all times
-
-## Interaction Patterns
-- Always respond to every user message
-- Never ignore or skip any input
-- Provide contextual responses that show you're listening
-- Redirect inappropriate questions back to your main purpose politely
-`;
-
-/**
- * Create the agent instance
- * This uses our centralized LLM provider and configuration
- */
-export const myFirstAgent = new Agent({
-  name: 'Helpful Assistant',
-  instructions: AGENT_PERSONALITY,
-  model: llmProviderFactory(defaultLLMConfig.models.generate),
+// Update your agent configuration to use the centralized provider
+export const yourAgent = new Agent({
+  name: "Your Agent",
+  instructions: "Your agent instructions here...",
+  // Use the centralized provider with environment variable model
+  model: llmProviderFactory(process.env.GENERATE_MODEL || 'gpt-oss-20b'),
   tools: {
-    // Add tools here later
+    // ... your tools
   },
-  memory: new Memory({
-    storage: new LibSQLStore({
-      url: process.env.DATABASE_URL || 'file:./mastra.db',
-    }),
-  }),
+  // ... other configuration
 });
 ```
 
-## Step 9: Create Agents Export
+## Create Test Scripts
 
-### 9.1 What We're Building
-
-We're creating a single point to export all agents:
-
-```
-src/mastra/agents/
-├── my-first-agent.ts    ← Already created
-└── index.ts            ← This file
-```
-
-### 9.2 Create the Index File
-
-Create `src/mastra/agents/index.ts`:
-
-```typescript
-/**
- * This file exports all agents for easy importing.
- */
-
-// Export all agents
-export { myFirstAgent } from './my-first-agent';
-// Add more agents here as you create them
-```
-
-## Step 10: Create Test Scripts
-
-### 10.1 What We're Building
+### What We're Building
 
 We're creating test scripts to verify everything works:
 
@@ -656,13 +527,13 @@ We're creating test scripts to verify everything works:
 └── test-agent.ts            ← This file
 ```
 
-### 10.2 Create LLM Test Script
+### Create LLM Test Script
 
 Create `test-llm-connection.ts` in your project root:
 
 ```typescript
 /**
- * Test script to verify LLM connection works
+ * Test script to verify LLM connection works with enhanced adapter
  */
 
 // Import dotenv to load environment variables
@@ -684,17 +555,20 @@ async function testLLMConnection() {
       { role: 'user', content: 'Hello, how are you?' }
     ];
     
-    console.log('📝 Testing default model...');
-    const response = await callModel(messages);
-    console.log('✅ Default model response:', response.text);
+    // Test with environment variable model
+    console.log('📝 Testing with environment model...');
+    const modelName = process.env.GENERATE_MODEL || 'gpt-oss-20b';
+    const response = await callModel(modelName, messages);
+    console.log('✅ Model response:', response.text);
     
-    console.log('🧠 Testing reasoning model...');
-    const reasoningResponse = await callModel(messages, 'reasoning');
-    console.log('✅ Reasoning model response:', reasoningResponse.text);
-    
-    console.log('⚡ Testing small model...');
-    const smallResponse = await callModel(messages, 'small', { timeoutMs: 5000 });
-    console.log('✅ Small model response:', smallResponse.text);
+    // Test with custom options
+    console.log('⚡ Testing with custom timeout...');
+    const quickResponse = await callModel(
+      modelName, 
+      messages, 
+      { timeoutMs: 5000, retries: 0 }
+    );
+    console.log('✅ Quick response:', quickResponse.text);
     
     console.log('🎉 All LLM connection tests passed!');
     
@@ -708,28 +582,28 @@ async function testLLMConnection() {
 testLLMConnection();
 ```
 
-### 10.3 Create Agent Test Script
+### Create Agent Test Script
 
 Create `test-agent.ts` in your project root:
 
 ```typescript
 /**
- * Test script to verify agent works
+ * Test script to verify agent works with centralized configuration
  */
 
 // Import dotenv to load environment variables
 import dotenv from 'dotenv';
 dotenv.config();
 
-// Import our agent
-import { myFirstAgent } from './src/mastra/agents';
+// Import your agent (update import path as needed)
+import { yourAgent } from './src/mastra/agents';
 
 async function testAgent() {
   try {
-    console.log('🤖 Testing agent...');
+    console.log('🤖 Testing agent with centralized LLM configuration...');
     
     // Test the agent
-    const response = await myFirstAgent.generate("Hello, what can you help me with?");
+    const response = await yourAgent.generate("Hello, what can you help me with?");
     console.log('✅ Agent response:', response.text);
     
     console.log('🎉 Agent test passed!');
@@ -744,347 +618,21 @@ async function testAgent() {
 testAgent();
 ```
 
-## Step 11: Update Package.json Scripts
+## Update Package.json Scripts
 
 Update your `package.json` to add test scripts:
 
 ```json
 {
-  "name": "your-mastra-project",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
   "scripts": {
     "test-llm": "npx ts-node test-llm-connection.ts",
     "test-agent": "npx ts-node test-agent.ts",
-    "build": "tsc",
-    "start": "node dist/index.js"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "@ai-sdk/openai": "^0.0.0",
-    "@mastra/core": "^0.0.0",
-    "dotenv": "^16.0.0"
-  },
-  "devDependencies": {
-    "@types/node": "^18.0.0",
-    "ts-node": "^10.0.0",
-    "typescript": "^4.0.0"
+    "validate-env": "npx ts-node validate-env.ts"
   }
 }
 ```
 
-## Step 12: Test Your Setup
-
-### 12.1 Run LLM Connection Test
-
-```bash
-# Load environment variables and test LLM connection
-npm run test-llm
-```
-
-You should see output like:
-```
-🧪 Testing centralized LLM configuration...
-📝 Testing default model...
-✅ Default model response: Hello! I'm doing well, thank you for asking!
-🧠 Testing reasoning model...
-✅ Reasoning model response: As an AI, I don't have feelings...
-⚡ Testing small model...
-✅ Small model response: Hello! I'm doing well, thanks for asking!
-🎉 All LLM connection tests passed!
-```
-
-### 12.2 Run Agent Test
-
-```bash
-# Test your agent
-npm run test-agent
-```
-
-You should see output like:
-```
-🤖 Testing agent...
-✅ Agent response: Hello! I'm an AI assistant designed to help you...
-🎉 Agent test passed!
-```
-
-## Step 13: Create Your Second Agent
-
-### 13.1 Create Second Agent File
-
-Create `src/mastra/agents/my-second-agent.ts`:
-
-```typescript
-/**
- * This is your second Mastra agent with a different personality
- */
-
-// Import Mastra components
-import { Agent } from '@mastra/core/agent';
-import { LibSQLStore } from '@mastra/libsql';
-import { Memory } from '@mastra/memory';
-
-// Import our centralized LLM provider and configuration
-import { llmProviderFactory } from '../llm/provider';
-import { defaultLLMConfig } from '../llm/config';
-
-/**
- * Define a different personality for this agent
- */
-const TECH_EXPERT_PERSONALITY = `
-# Tech Expert - Personality Profile
-
-## Overall Character
-You are a tech expert who specializes in helping users with technical questions.
-You're knowledgeable, precise, and good at explaining complex topics simply.
-
-## Communication Style
-- **Tone**: Professional but approachable
-- **Language**: Technical English with simple explanations
-- **Focus**: Accuracy and clarity
-
-## Key Skills
-1. **Technical Knowledge**: Deep understanding of technology
-2. **Problem Solving**: Good at breaking down complex problems
-3. **Clear Explanations**: Can explain technical concepts simply
-4. **Patient Guidance**: Helps users learn, not just gives answers
-
-## Interaction Patterns
-- Ask clarifying questions when needed
-- Provide step-by-step instructions
-- Include examples when helpful
-- Verify understanding before moving on
-`;
-
-/**
- * Create the second agent instance
- */
-export const mySecondAgent = new Agent({
-  name: 'Tech Expert',
-  instructions: TECH_EXPERT_PERSONALITY,
-  model: llmProviderFactory(defaultLLMConfig.models.reasoning), // Use reasoning model
-  tools: {
-    // Add tools here later
-  },
-  memory: new Memory({
-    storage: new LibSQLStore({
-      url: process.env.DATABASE_URL || 'file:./mastra.db',
-    }),
-  }),
-});
-```
-
-### 13.2 Update Agents Export
-
-Update `src/mastra/agents/index.ts`:
-
-```typescript
-/**
- * This file exports all agents for easy importing.
- */
-
-// Export all agents
-export { myFirstAgent } from './my-first-agent';
-export { mySecondAgent } from './my-second-agent'; // Add this line
-```
-
-### 13.3 Test Both Agents
-
-Update `test-agent.ts`:
-
-```typescript
-/**
- * Test script to verify both agents work
- */
-
-// Import dotenv to load environment variables
-import dotenv from 'dotenv';
-dotenv.config();
-
-// Import our agents
-import { myFirstAgent, mySecondAgent } from './src/mastra/agents';
-
-async function testAgents() {
-  try {
-    console.log('🤖 Testing first agent...');
-    const response1 = await myFirstAgent.generate("Hello, what can you help me with?");
-    console.log('✅ First agent response:', response1.text);
-    
-    console.log('\n🤖 Testing second agent...');
-    const response2 = await mySecondAgent.generate("Explain what vLLM is");
-    console.log('✅ Second agent response:', response2.text);
-    
-    console.log('\n🎉 Both agents test passed!');
-    
-  } catch (error) {
-    console.error('❌ Agents test failed:', error);
-    process.exit(1);
-  }
-}
-
-// Run the test
-testAgents();
-```
-
-Run the test:
-```bash
-npm run test-agent
-```
-
-## Step 14: Advanced Usage Examples
-
-### 14.1 Task-Specific Model Selection
-
-```typescript
-// In your application code
-import { callModel } from './src/mastra/llm';
-import type { CoreMessage } from '@mastra/core';
-
-async function handleUserRequest() {
-  const messages: CoreMessage[] = [
-    { role: 'user', content: 'Explain quantum computing simply' }
-  ];
-  
-  // For complex explanations, use reasoning model
-  const complexResponse = await callModel(messages, 'reasoning');
-  console.log('Complex response:', complexResponse.text);
-  
-  // For quick responses, use small model
-  const quickMessages: CoreMessage[] = [
-    { role: 'user', content: 'What time is it?' }
-  ];
-  const quickResponse = await callModel(quickMessages, 'small');
-  console.log('Quick response:', quickResponse.text);
-}
-```
-
-### 14.2 Custom Configuration Override
-
-```typescript
-// Override default configuration for special cases
-import { callModel, defaultLLMConfig } from './src/mastra/llm';
-
-async function handleHighPriorityRequest() {
-  const customConfig = {
-    ...defaultLLMConfig,
-    default: {
-      timeoutMs: 60000,  // Longer timeout
-      retries: 3,        // More retries
-      backoffMs: 2000    // Longer backoff
-    }
-  };
-  
-  const messages = [
-    { role: 'user', content: 'Very complex technical question...' }
-  ];
-  
-  const response = await callModel(messages, 'default', {}, customConfig);
-  return response;
-}
-```
-
-### 14.3 Error Handling with Fallbacks
-
-```typescript
-// Robust error handling with fallback models
-import { callModel } from './src/mastra/llm';
-
-async function robustLLMCall(messages: CoreMessage[]) {
-  try {
-    // Try with preferred model first
-    console.log('Trying primary model...');
-    return await callModel(messages, 'generate', { timeoutMs: 30000 });
-  } catch (error) {
-    console.warn('Primary model failed, trying fallback...', error.message);
-    
-    try {
-      // Fallback to smaller model
-      console.log('Trying fallback model...');
-      return await callModel(messages, 'small', { timeoutMs: 15000 });
-    } catch (fallbackError) {
-      console.error('All models failed:', fallbackError.message);
-      throw new Error('Unable to get LLM response after all retries');
-    }
-  }
-}
-```
-
-## Step 15: Production Considerations
-
-### 15.1 Environment Validation
-
-Create `validate-env.ts`:
-
-```typescript
-/**
- * Validate environment configuration
- */
-
-import dotenv from 'dotenv';
-dotenv.config();
-
-function validateEnvironment() {
-  console.log('🔍 Validating environment configuration...');
-  
-  const required = ['VLLM_BASE_URL'];
-  const missing = required.filter(key => !process.env[key]);
-  
-  if (missing.length > 0) {
-    console.error('❌ Missing required environment variables:', missing);
-    console.log('Please check your .env file');
-    process.exit(1);
-  }
-  
-  console.log('✅ Environment validation passed:');
-  console.log('   VLLM_BASE_URL:', process.env.VLLM_BASE_URL);
-  console.log('   GENERATE_MODEL:', process.env.GENERATE_MODEL || 'gpt-oss-20b');
-  console.log('   API Key:', process.env.VLLM_API_KEY ? 'Set' : 'Not set (may be optional)');
-  
-  return true;
-}
-
-// Run validation
-validateEnvironment();
-```
-
-Add to package.json:
-```json
-{
-  "scripts": {
-    "validate-env": "npx ts-node validate-env.ts",
-    "test-llm": "npm run validate-env && npx ts-node test-llm-connection.ts",
-    "test-agent": "npm run validate-env && npx ts-node test-agent.ts"
-  }
-}
-```
-
-### 15.2 Monitoring and Logging
-
-Update `src/mastra/llm/adapter.ts` to add logging:
-
-```typescript
-// Add logging to the callModel function
-export async function callModel(/* ... */) {
-  const startTime = Date.now();
-  console.log(`🚀 Calling model: ${modelName} (attempt ${attempt + 1})`);
-  
-  try {
-    const result = await /* ... existing logic ... */;
-    const duration = Date.now() - startTime;
-    console.log(`✅ Model call completed in ${duration}ms`);
-    return result;
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(`❌ Model call failed after ${duration}ms:`, error.message);
-    throw error;
-  }
-}
-```
-
-## Benefits of This Architecture
+## Benefits of This Enhanced Architecture
 
 ### 🔧 Maintenance Benefits
 - **One place to change** LLM configuration
@@ -1109,16 +657,16 @@ export async function callModel(/* ... */) {
 ### 1. "Connection Refused" Error
 ```bash
 # Check if your vLLM server is running
-curl http://100.122.140.63:8000/v1/models
+curl http://yourip:yourport/v1/models
 
 # Check network connectivity
-ping 100.122.140.63
+ping yourip
 ```
 
 ### 2. "Model not found" Error
 ```bash
 # List available models
-curl http://100.122.140.63:8000/v1/models
+curl http://yourip:yourport/v1/models
 
 # Update your .env with correct model names
 ```
@@ -1132,12 +680,12 @@ LLM_RETRIES=3
 
 ## Next Steps
 
-1. **✅ Completed**: Set up centralized LLM configuration
-2. **✅ Completed**: Created multiple agents using shared configuration
-3. **✅ Completed**: Tested everything works
+1. **✅ Completed**: Set up centralized LLM configuration using proven architecture
+2. **✅ Completed**: Enhanced existing adapter with better documentation
+3. **✅ Completed**: Updated agents to use shared configuration
 4. **Now**: Add custom tools to your agents
 5. **Next**: Implement database storage for conversation history
 6. **Later**: Add more agents with different personalities
 7. **Finally**: Deploy to production environment
 
-This architecture provides a solid foundation for building scalable Mastra applications with consistent, maintainable LLM configuration that any developer can understand and extend.
+This architecture provides a solid foundation that builds upon your existing working code while adding the centralized configuration benefits you need for scalability.
