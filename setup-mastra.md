@@ -520,16 +520,34 @@ export const yourAgent = new Agent({
 
 ### What We're Building
 
-We're creating test scripts to verify everything works:
+We're creating test scripts to verify everything works and placing them in the proper location:
 
 ```
-├── test-llm-connection.ts    ← This file
-└── test-agent.ts            ← This file
+src/mastra/
+├── llm/
+│   ├── config.ts
+│   ├── provider.ts
+│   ├── adapter.ts
+│   └── index.ts
+├── agents/
+│   └── your-existing-agent.ts
+└── tests/                      ← This folder
+    ├── test-llm-connection.ts   ← Test files go here
+    └── test-agent.ts           ← Test files go here
+```
+
+### Create Tests Directory
+
+First, create the tests directory:
+
+```bash
+# Create the tests directory
+mkdir src/mastra/tests
 ```
 
 ### Create LLM Test Script
 
-Create `test-llm-connection.ts` in your project root:
+Create `src/mastra/tests/test-llm-connection.ts`:
 
 ```typescript
 /**
@@ -541,7 +559,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // Import our centralized LLM adapter
-import { callModel } from './src/mastra/llm';
+import { callModel } from '../llm';
 
 // Import Mastra types
 import type { CoreMessage } from '@mastra/core';
@@ -584,7 +602,7 @@ testLLMConnection();
 
 ### Create Agent Test Script
 
-Create `test-agent.ts` in your project root:
+Create `src/mastra/tests/test-agent.ts`:
 
 ```typescript
 /**
@@ -596,7 +614,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 // Import your agent (update import path as needed)
-import { yourAgent } from './src/mastra/agents';
+import { yourAgent } from '../agents';
 
 async function testAgent() {
   try {
@@ -625,9 +643,9 @@ Update your `package.json` to add test scripts:
 ```json
 {
   "scripts": {
-    "test-llm": "npx ts-node test-llm-connection.ts",
-    "test-agent": "npx ts-node test-agent.ts",
-    "validate-env": "npx ts-node validate-env.ts"
+    "test-llm": "npx ts-node src/mastra/tests/test-llm-connection.ts",
+    "test-agent": "npx ts-node src/mastra/tests/test-agent.ts",
+    "validate-env": "npx ts-node src/mastra/tests/validate-env.ts"
   }
 }
 ```
@@ -671,11 +689,72 @@ curl http://yourip:yourport/v1/models
 # Update your .env with correct model names
 ```
 
+### Create Environment Validation Script
+
+Create `src/mastra/tests/validate-env.ts`:
+
+```typescript
+/**
+ * Validate environment configuration
+ */
+
+import dotenv from 'dotenv';
+dotenv.config();
+
+function validateEnvironment() {
+  console.log('🔍 Validating environment configuration...');
+  
+  const required = ['VLLM_BASE_URL'];
+  const missing = required.filter(key => !process.env[key]);
+  
+  if (missing.length > 0) {
+    console.error('❌ Missing required environment variables:', missing);
+    console.log('Please check your .env file');
+    process.exit(1);
+  }
+  
+  console.log('✅ Environment validation passed:');
+  console.log('   VLLM_BASE_URL:', process.env.VLLM_BASE_URL);
+  console.log('   GENERATE_MODEL:', process.env.GENERATE_MODEL || 'gpt-oss-20b');
+  console.log('   API Key:', process.env.VLLM_API_KEY ? 'Set' : 'Not set (may be optional)');
+  
+  return true;
+}
+
+// Run validation
+validateEnvironment();
+```
+
+## Troubleshooting Common Issues
+
+### 1. "Connection Refused" Error
+```bash
+# Check if your vLLM server is running
+curl http://yourip:yourport/v1/models
+
+# Check network connectivity
+ping yourip
+```
+
+### 2. "Model not found" Error
+```bash
+# List available models
+curl http://yourip:yourport/v1/models
+
+# Update your .env with correct model names
+```
+
 ### 3. "Timeout" Errors
 ```bash
 # Increase timeout values in .env
 LLM_TIMEOUT_MS=60000
 LLM_RETRIES=3
+```
+
+### 4. Environment Configuration Issues
+```bash
+# Validate your environment configuration
+pnpm run validate-env
 ```
 
 ## Next Steps
