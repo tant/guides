@@ -2,206 +2,312 @@
 
 ## Overview
 
-This guide will walk you through creating a decoupled multi-channel architecture that keeps business logic centralized while making channel support clearly visible. This is Part 1 - the core implementation that applies to all channels.
+This guide will walk you through creating a decoupled multi-channel architecture that keeps business logic centralized while making channel support clearly visible. This is Part 1 - the core implementation for a new project.
 
-## Current Structure Analysis
+## Project Structure Overview
 
-Let's first understand what we have:
+Before diving into implementation, let's understand the clean architecture we're building:
 
 ```
 src/
 ├── mastra/
-│   ├── core/              ← Core business logic (KEEP THIS)
-│   │   ├── models/        ← Message models
-│   │   ├── processor/     ← Central message processor
+│   ├── core/              ← Central business logic and message processing
+│   │   ├── models/        ← Standardized message formats
+│   │   ├── processor/      ← Central message processor (business logic)
 │   │   └── index.ts
-│   ├── llm/               ← LLM adapters (KEEP THIS)
+│   ├── llm/               ← LLM integration and adapters
 │   │   ├── adapter.ts
 │   │   ├── config.ts
 │   │   ├── provider.ts
 │   │   └── index.ts
-│   ├── channels/          ← Base adapters (MOVE THESE)
-│   │   ├── base-adapter.ts
-│   │   └── index.ts
 │   └── index.ts
-└── (other files)
+├── channels/               ← Each channel as independent module
+│   ├── telegram/
+│   │   ├── adapter.ts     ← Telegram-specific integration
+│   │   ├── config.ts      ← Telegram configuration
+│   │   └── index.ts
+│   ├── whatsapp/
+│   │   ├── adapter.ts     ← WhatsApp-specific integration
+│   │   ├── config.ts      ← WhatsApp configuration
+│   │   └── index.ts
+│   └── web/
+│       ├── adapter.ts     ← Web-specific integration
+│       ├── config.ts      ← Web configuration
+│       └── index.ts
+└── main.ts                ← Application entry point
 ```
 
-## Step 1: Restructure Channel Architecture
+### Key Design Principles
 
-### 1.1 Create Decoupled Channel Structure
+1. **Centralized Business Logic**: All message processing logic lives in `src/mastra/core/processor/`
+2. **Decoupled Channels**: Each channel is an independent module in `src/channels/`
+3. **Standardized Interface**: All channels use the same message format
+4. **Clear Visibility**: Immediately obvious which channels are supported
 
-First, let's create the new structure for channels:
+## Why This Architecture?
+
+### The Problem with Monolithic Approach
+```
+❌ Bad: Everything mixed together
+src/
+├── telegram-handler.ts
+├── whatsapp-handler.ts
+├── web-handler.ts
+├── business-logic.ts
+└── message-processor.ts
+```
+
+### The Solution: Clear Separation
+```
+✅ Good: Clean separation of concerns
+src/
+├── mastra/core/processor/     ← Business logic (ONE PLACE)
+└── channels/                 ← Channel integrations (MANY PLACES)
+    ├── telegram/            ← Only Telegram integration code
+    ├── whatsapp/            ← Only WhatsApp integration code
+    └── web/                 ← Only Web integration code
+```
+
+## Step 1: Create Project Structure
+
+### 1.1 Initialize Clean Project Structure
+
+Let's create the foundational project structure:
 
 ```bash
-# Create the channels directory at project root
-mkdir channels
-
-# Create individual channel directories (examples)
-mkdir -p channels/telegram/{src,config}
-mkdir -p channels/whatsapp/{src,config}
-mkdir -p channels/web/{src,config}
-mkdir -p channels/line/{src,config}
+# Create the main project structure
+mkdir -p src/mastra/{core,llm}
+mkdir -p src/mastra/core/{models,processor}
+mkdir -p src/channels/{telegram,whatsapp,web,line}
+mkdir -p src/channels/telegram/{config,tests}
+mkdir -p src/channels/whatsapp/{config,tests}
+mkdir -p src/channels/web/{config,tests}
+mkdir -p src/channels/line/{config,tests}
 ```
 
-This creates a clear structure:
+This creates a clear, immediately understandable structure:
 ```
-channels/
-├── telegram/      ← Clearly shows Telegram support
-├── whatsapp/      ← Clearly shows WhatsApp support
-├── web/           ← Clearly shows Web support
-└── line/          ← Clearly shows LINE support
-```
-
-### 1.2 Move Base Adapter
-
-Move the base adapter to a shared location:
-
-```bash
-# Move base adapter to a shared location
-mkdir -p src/mastra/shared
-mv src/mastra/channels/base-adapter.ts src/mastra/shared/
+src/
+├── mastra/
+│   ├── core/              ← ONE PLACE for all business logic
+│   │   ├── models/        ← Standardized message formats
+│   │   └── processor/    ← Central message processing
+│   └── llm/               ← LLM integration
+└── channels/              ← EACH CHANNEL as independent module
+    ├── telegram/         ← Only Telegram-related code
+    ├── whatsapp/        ← Only WhatsApp-related code
+    ├── web/              ← Only Web-related code
+    └── line/             ← Only LINE-related code
 ```
 
-Create `src/mastra/shared/base-channel-adapter.ts`:
+## Step 2: Create Message Models
+
+### 2.1 Define Standardized Message Formats
+
+Create `src/mastra/core/models/message.ts`:
 
 ```typescript
 /**
- * Base channel adapter that all channel adapters extend
- * This provides common functionality for all channels
+ * Standardized message models for multi-channel processing
+ * This is the common language ALL channels speak
  */
 
-import { NormalizedMessage, ProcessedResponse, ChannelUser, ChannelContext } from '../core/models/message';
-import { ChannelType, CHANNEL_CONFIGS } from '../core/models/channel';
+export interface ChannelUser {
+  id: string;           // Channel-specific user ID
+  username?: string;    // Username if available
+  displayName?: string; // Display name
+  phoneNumber?: string; // Phone number if available
+  email?: string;       // Email if available
+}
 
-export abstract class BaseChannelAdapter {
-  protected channelId: string;
-  protected channelType: ChannelType;
-  protected config: typeof CHANNEL_CONFIGS[ChannelType];
+export interface ChannelContext {
+  channelId: string;        // Channel identifier (telegram, whatsapp, web, etc.)
+  channelMessageId?: string; // Channel-specific message ID
+  threadId?: string;        // Conversation thread ID if supported
+  metadata: Record<string, any>; // Channel-specific metadata
+}
 
-  constructor(channelId: string, channelType: ChannelType) {
-    this.channelId = channelId;
-    this.channelType = channelType;
-    this.config = CHANNEL_CONFIGS[channelType];
-  }
+export interface NormalizedMessage {
+  id: string;                    // Unique message ID
+  content: string;              // Message content
+  contentType: 'text' | 'image' | 'document' | 'audio' | 'video' | 'location' | 'contact';
+  sender: ChannelUser;          // Sender information
+  timestamp: Date;              // When message was sent
+  channel: ChannelContext;     // Channel context
+  replyToMessage?: {            // Information about message being replied to
+    id: string;
+    content: string;
+  };
+  attachments?: Array<{
+    url: string;
+    type: string;
+    filename?: string;
+  }>;
+  metadata: Record<string, any>; // Additional message metadata
+}
 
-  /**
-   * Normalize channel-specific message to standardized format
-   * Each channel must implement this method
-   */
-  protected abstract normalizeMessage(rawMessage: any): NormalizedMessage;
-
-  /**
-   * Send response back through the channel
-   * Each channel must implement this method
-   */
-  protected abstract sendResponse(response: ProcessedResponse, originalMessage: NormalizedMessage): Promise<void>;
-
-  /**
-   * Handle incoming message from channel
-   * This is the main entry point for all channel messages
-   */
-  async handleMessage(rawMessage: any): Promise<void> {
-    try {
-      // Normalize the message to our standard format
-      const normalizedMessage = this.normalizeMessage(rawMessage);
-      
-      console.log(`📥 Received message from ${this.channelId}`, {
-        messageId: normalizedMessage.id,
-        sender: normalizedMessage.sender.id,
-        channel: this.channelId
-      });
-
-      // At this point, the message is normalized and ready for central processing
-      // The actual processing will be done by the injected processor
-      // This method should be overridden by channels that need custom handling
-      
-    } catch (error) {
-      console.error(`❌ Error in base handleMessage for ${this.channelId}:`, error);
-      await this.sendErrorResponse(error, rawMessage);
-    }
-  }
-
-  /**
-   * Send error response - can be overridden by specific adapters
-   */
-  protected async sendErrorResponse(error: any, originalMessage: any): Promise<void> {
-    console.warn(`⚠️  Error response not implemented for ${this.channelId}`);
-  }
-
-  /**
-   * Helper method to create channel context
-   */
-  protected createChannelContext(
-    channelMessageId?: string,
-    threadId?: string,
-    metadata: Record<string, any> = {}
-  ): ChannelContext {
-    return {
-      channelId: this.channelId,
-      channelMessageId,
-      threadId,
-      metadata
-    };
-  }
-
-  /**
-   * Helper method to create channel user
-   */
-  protected createChannelUser(
-    id: string,
-    username?: string,
-    displayName?: string,
-    phoneNumber?: string,
-    email?: string
-  ): ChannelUser {
-    return {
-      id,
-      username,
-      displayName,
-      phoneNumber,
-      email
-    };
-  }
-
-  /**
-   * Validate message before processing
-   */
-  protected validateMessage(message: NormalizedMessage): boolean {
-    // Check if message content is not empty
-    if (!message.content || message.content.trim().length === 0) {
-      return false;
-    }
-
-    // Check if sender information is present
-    if (!message.sender || !message.sender.id) {
-      return false;
-    }
-
-    // Check message length against channel limits
-    if (message.content.length > this.config.maxMessageLength) {
-      return false;
-    }
-
-    return true;
-  }
+export interface ProcessedResponse {
+  content: string;              // Response content
+  contentType: 'text' | 'image' | 'document' | 'quick_reply' | 'carousel';
+  attachments?: Array<{
+    url: string;
+    type: string;
+    filename?: string;
+  }>;
+  quickReplies?: Array<{
+    title: string;
+    payload: string;
+  }>;
+  metadata: Record<string, any>; // Response metadata
 }
 ```
 
-## Step 2: Update Core Message Processor
+### 2.2 Define Channel Configurations
 
-### 2.1 Enhance Central Message Processor
+Create `src/mastra/core/models/channel.ts`:
 
-Update `src/mastra/core/processor/message-processor.ts`:
+```typescript
+/**
+ * Channel definitions and utilities
+ */
+
+export type ChannelType = 'telegram' | 'whatsapp' | 'web' | 'line' | 'facebook' | 'email' | 'zalo';
+
+export interface ChannelConfig {
+  type: ChannelType;
+  name: string;
+  supports: {
+    text: boolean;
+    images: boolean;
+    documents: boolean;
+    audio: boolean;
+    video: boolean;
+    quickReplies: boolean;
+    carousel: boolean;
+  };
+  maxMessageLength: number;
+  rateLimits?: {
+    messagesPerSecond: number;
+    messagesPerMinute: number;
+  };
+}
+
+export const CHANNEL_CONFIGS: Record<ChannelType, ChannelConfig> = {
+  telegram: {
+    type: 'telegram',
+    name: 'Telegram',
+    supports: {
+      text: true,
+      images: true,
+      documents: true,
+      audio: true,
+      video: true,
+      quickReplies: true,
+      carousel: false
+    },
+    maxMessageLength: 4096
+  },
+  whatsapp: {
+    type: 'whatsapp',
+    name: 'WhatsApp',
+    supports: {
+      text: true,
+      images: true,
+      documents: true,
+      audio: true,
+      video: true,
+      quickReplies: true,
+      carousel: false
+    },
+    maxMessageLength: 4096
+  },
+  web: {
+    type: 'web',
+    name: 'Web Chat',
+    supports: {
+      text: true,
+      images: true,
+      documents: true,
+      audio: true,
+      video: true,
+      quickReplies: true,
+      carousel: true
+    },
+    maxMessageLength: 10000
+  },
+  line: {
+    type: 'line',
+    name: 'LINE',
+    supports: {
+      text: true,
+      images: true,
+      documents: false,
+      audio: true,
+      video: true,
+      quickReplies: true,
+      carousel: true
+    },
+    maxMessageLength: 2000
+  },
+  facebook: {
+    type: 'facebook',
+    name: 'Facebook Messenger',
+    supports: {
+      text: true,
+      images: true,
+      documents: false,
+      audio: true,
+      video: true,
+      quickReplies: true,
+      carousel: true
+    },
+    maxMessageLength: 2000
+  },
+  email: {
+    type: 'email',
+    name: 'Email',
+    supports: {
+      text: true,
+      images: true,
+      documents: true,
+      audio: false,
+      video: false,
+      quickReplies: false,
+      carousel: false
+    },
+    maxMessageLength: 100000
+  },
+  zalo: {
+    type: 'zalo',
+    name: 'Zalo',
+    supports: {
+      text: true,
+      images: true,
+      documents: true,
+      audio: true,
+      video: true,
+      quickReplies: true,
+      carousel: false
+    },
+    maxMessageLength: 4096
+  }
+};
+```
+
+## Step 3: Create Central Message Processor
+
+### 3.1 Main Message Processor
+
+Create `src/mastra/core/processor/message-processor.ts`:
 
 ```typescript
 /**
  * Central message processor that handles messages from all channels
- * This is where your business logic lives
+ * This is WHERE YOUR BUSINESS LOGIC LIVES
  */
 
 import { NormalizedMessage, ProcessedResponse } from '../models/message';
-import { callModel } from '../../llm/adapter';
+import { callModel } from '../../../llm/adapter';
 import { CHANNEL_CONFIGS } from '../models/channel';
 
 export class CentralMessageProcessor {
@@ -215,7 +321,7 @@ export class CentralMessageProcessor {
 
   /**
    * Process a normalized message and return a response
-   * This is the main business logic entry point
+   * THIS IS WHERE ALL YOUR BUSINESS LOGIC GOES
    */
   async processMessage(message: NormalizedMessage): Promise<ProcessedResponse> {
     try {
@@ -269,7 +375,7 @@ export class CentralMessageProcessor {
       // Get appropriate model based on message length and complexity
       const modelName = this.selectModelForMessage(message);
       
-      // Call the LLM using your existing adapter
+      // Call the LLM
       const result = await callModel(modelName, context, {
         timeoutMs: 30000,
         retries: 2
@@ -404,7 +510,7 @@ export class CentralMessageProcessor {
       }
 
       // Add small delay to prevent overwhelming the system
-      await new Promise(resolve => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 10));
     }
 
     this.isProcessing = false;
@@ -415,9 +521,9 @@ export class CentralMessageProcessor {
 export const messageProcessor = new CentralMessageProcessor();
 ```
 
-## Step 3: Create Channel Registry
+## Step 4: Create Channel Management
 
-### 3.1 Create Channel Management
+### 4.1 Channel Registry
 
 Create `src/mastra/channels/registry.ts`:
 
@@ -427,15 +533,20 @@ Create `src/mastra/channels/registry.ts`:
  * This keeps track of which channels are currently active
  */
 
-import { BaseChannelAdapter } from '../shared/base-channel-adapter';
+// Simple interface for channel adapters
+export interface ChannelAdapter {
+  channelId: string;
+  handleMessage: (rawMessage: any) => Promise<void>;
+  shutdown?: () => Promise<void>;
+}
 
 export class ChannelRegistry {
-  private adapters = new Map<string, BaseChannelAdapter>();
+  private adapters = new Map<string, ChannelAdapter>();
   
   /**
    * Register a channel adapter
    */
-  register(channelId: string, adapter: BaseChannelAdapter): void {
+  register(channelId: string, adapter: ChannelAdapter): void {
     this.adapters.set(channelId, adapter);
     console.log(`✅ Registered channel: ${channelId}`);
   }
@@ -443,7 +554,7 @@ export class ChannelRegistry {
   /**
    * Get a channel adapter by ID
    */
-  get(channelId: string): BaseChannelAdapter | undefined {
+  get(channelId: string): ChannelAdapter | undefined {
     return this.adapters.get(channelId);
   }
   
@@ -480,8 +591,8 @@ export class ChannelRegistry {
     const shutdownPromises: Promise<void>[] = [];
     
     for (const [channelId, adapter] of this.adapters) {
-      if (typeof (adapter as any).shutdown === 'function') {
-        shutdownPromises.push((adapter as any).shutdown());
+      if (adapter.shutdown) {
+        shutdownPromises.push(adapter.shutdown());
       }
     }
     
@@ -495,9 +606,9 @@ export class ChannelRegistry {
 export const channelRegistry = new ChannelRegistry();
 ```
 
-## Step 4: Create Main Application
+## Step 5: Create Main Application
 
-### 4.1 Create Bootstrap Application
+### 5.1 Application Entry Point
 
 Create `src/main.ts`:
 
@@ -517,10 +628,40 @@ import { channelRegistry } from './mastra/channels/registry';
 async function loadChannels(processor: CentralMessageProcessor) {
   console.log('🚀 Loading channels...');
 
-  // Load channels dynamically - this will be implemented by each channel
-  // See specific channel guides for implementation details
-  
-  console.log(`✅ Loaded channels: ${channelRegistry.listChannels().join(', ') || 'None'}`);
+  // Load Telegram channel if configured
+  if (process.env.TELEGRAM_BOT_TOKEN) {
+    try {
+      const { TelegramChannelAdapter } = await import('./channels/telegram');
+      const adapter = new TelegramChannelAdapter(
+        { token: process.env.TELEGRAM_BOT_TOKEN },
+        processor
+      );
+      channelRegistry.register('telegram', adapter);
+    } catch (error) {
+      console.error('❌ Failed to load Telegram channel:', error);
+    }
+  }
+
+  // Load WhatsApp channel if configured
+  if (process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID) {
+    try {
+      const { WhatsAppChannelAdapter } = await import('./channels/whatsapp');
+      const adapter = new WhatsAppChannelAdapter(
+        {
+          accessToken: process.env.WHATSAPP_ACCESS_TOKEN,
+          phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID,
+          webhookVerifyToken: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || 'default_verify_token'
+        },
+        processor
+      );
+      channelRegistry.register('whatsapp', adapter);
+    } catch (error) {
+      console.error('❌ Failed to load WhatsApp channel:', error);
+    }
+  }
+
+  // Add more channels here as needed
+  console.log(`✅ Loaded channels: ${channelRegistry.listChannels().join(', ')}`);
 }
 
 // Graceful shutdown handler
@@ -564,88 +705,25 @@ bootstrap().catch(error => {
 export { bootstrap, shutdown };
 ```
 
-## Step 5: Update Environment Configuration
-
-### 5.1 Update .env File
-
-Update your `.env` file:
-
-```bash
-# .env
-# Your vLLM endpoint
-VLLM_BASE_URL=http://yourip:yourport/v1
-VLLM_API_KEY=your-api-key-here
-
-# Model names
-GENERATE_MODEL=gpt-oss-20b
-REASONING_MODEL=gpt-oss-20b
-SMALL_GENERATE_MODEL=gpt-oss-20b
-
-# Default timeout and retry settings
-LLM_TIMEOUT_MS=30000
-LLM_RETRIES=2
-LLM_BACKOFF_MS=1000
-
-# Database configuration
-DATABASE_URL=file:./mastra.db
-
-# Channel configurations
-# Add channel-specific configurations as needed
-# TELEGRAM_BOT_TOKEN=your-telegram-bot-token
-# WHATSAPP_ACCESS_TOKEN=your-whatsapp-access-token
-```
-
-## Step 6: Update Package.json
-
-### 6.1 Add Scripts and Dependencies
-
-Update your `package.json`:
-
-```json
-{
-  "name": "multi-channel-mastra",
-  "version": "1.0.0",
-  "description": "Multi-channel Mastra agent with decoupled architecture",
-  "main": "dist/main.js",
-  "scripts": {
-    "dev": "ts-node src/main.ts",
-    "build": "tsc",
-    "start": "node dist/main.js",
-    "test": "jest",
-    "test:watch": "jest --watch"
-  },
-  "dependencies": {
-    "@mastra/core": "^0.14.0",
-    "@ai-sdk/openai": "^0.0.0",
-    "dotenv": "^16.0.0"
-  },
-  "devDependencies": {
-    "@types/node": "^18.0.0",
-    "ts-node": "^10.0.0",
-    "typescript": "^4.0.0"
-  }
-}
-```
-
-## Benefits of This Decoupled Architecture
+## Benefits of This Architecture
 
 ### 🎯 **Clear Channel Visibility**
 ```
-channels/
-├── telegram/     ← Clearly shows Telegram support
-├── whatsapp/     ← Clearly shows WhatsApp support
-├── web/          ← Clearly shows Web support
-└── line/         ← Clearly shows LINE support
+src/channels/
+├── telegram/     ← Immediately clear Telegram support
+├── whatsapp/     ← Immediately clear WhatsApp support
+├── web/          ← Immediately clear Web support
+└── line/         ← Immediately clear LINE support
 ```
 
 ### 🔧 **Easy Maintenance**
-- **Business logic** in `src/mastra/core/processor/` (one place)
-- **Channel adapters** in `channels/` (separate modules)
-- **No redundant packages** - uses existing mastra structure
+- **Business logic** in `src/mastra/core/processor/` (ONE PLACE)
+- **Channel adapters** in `src/channels/` (SEPARATE MODULES)
+- **No redundant packages** - clean, simple structure
 
 ### 🚀 **Scalability**
-- Add new channel: `mkdir channels/newchannel`
-- Remove channel: `rm -rf channels/oldchannel`
+- Add new channel: `mkdir src/channels/newchannel`
+- Remove channel: `rm -rf src/channels/oldchannel`
 - No impact on other channels
 
 ### 🛡️ **Reliability**
@@ -661,12 +739,13 @@ channels/
 
 ## Next Steps
 
-1. **✅ Completed**: Restructured to decoupled channel architecture
-2. **✅ Completed**: Kept business logic in central processor
-3. **✅ Completed**: Made channel support clearly visible
-4. **Now**: Implement specific channel adapters (see channel-specific guides)
-5. **Next**: Test with actual channels
-6. **Later**: Add more channels as needed
-7. **Finally**: Deploy with monitoring and logging
+1. **✅ Completed**: Created clean project structure
+2. **✅ Completed**: Defined standardized message models
+3. **✅ Completed**: Built central message processor
+4. **✅ Completed**: Set up channel management
+5. **Now**: Implement specific channel adapters (see Part 2)
+6. **Next**: Test with actual channels
+7. **Later**: Add more channels as needed
+8. **Finally**: Deploy with monitoring and logging
 
 This architecture provides a clean, maintainable, and scalable solution that makes it immediately clear which channels are supported while keeping all business logic centralized.
