@@ -21,4 +21,5 @@ Lưu ý bắt buộc: MỌI cập nhật phải tuân thủ tuyệt đối các 
 [x] 8. Ở mục 7.1, bổ sung hướng dẫn Programmatic Configuration có hành động: cập nhật hàm loadChannels trong src/mastra/index.ts để truyền config đầy đủ vào TelegramChannelAdapter (token + webhookUrl + polling + pollingInterval + maxRetries) ví dụ:
 	   const adapter = new TelegramChannelAdapter({ token: process.env.TELEGRAM_BOT_TOKEN, webhookUrl: 'https://your-domain.com/webhook/telegram', polling: true, pollingInterval: 300, maxRetries: 3 }, processor);
 [x] 9. Bỏ mục Usage
+[x] 10. Thêm bước cập nhật các biến môi trường cho telegram trước bước 7
 

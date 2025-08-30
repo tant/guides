@@ -591,6 +591,20 @@ Ensure your project's `package.json` includes the required dependencies:
 }
 ```
 
+## Step 6.5: Update Telegram Environment Variables
+
+Before proceeding to documentation, ensure you have set the required environment variables for Telegram integration in your `.env` file:
+
+```env
+TELEGRAM_BOT_TOKEN=your-telegram-bot-token
+TELEGRAM_WEBHOOK_URL=https://your-domain.com/webhook/telegram  # Optional
+TELEGRAM_POLLING=true                                           # Optional
+TELEGRAM_POLLING_INTERVAL=300                                   # Optional
+TELEGRAM_MAX_RETRIES=3                                          # Optional
+```
+
+These variables must be configured before running or testing the Telegram adapter.
+
 ## Step 7: Create Documentation
 
 ### 7.1 Create README
