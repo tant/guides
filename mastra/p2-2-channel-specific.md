@@ -54,15 +54,16 @@ Before starting, make sure you have completed the core implementation from Part 
 
 ### 1.1 Verify Channel Directory Structure
 
-The channel files are created within the Mastra structure:
+The channel files are created within the Mastra structure (updated to use a dedicated `config/` folder with `index.ts` – no standalone `config.ts` at root):
 
 ```
 src/mastra/channels/telegram/
-├── adapter.ts    ← Main Telegram adapter
-├── config.ts     ← Configuration
-├── index.ts      ← Exports
-├── tests/        ← Test files
-└── README.md     ← Documentation
+├── adapter.ts          ← Main Telegram adapter
+├── config/             ← Configuration module folder
+│   └── index.ts        ← Configuration entry (was previously config.ts at root)
+├── index.ts            ← Exports
+├── tests/              ← Test files
+└── README.md           ← Documentation
 ```
 
 Create the directory structure:
@@ -72,11 +73,13 @@ Create the directory structure:
 mkdir -p src/mastra/channels/telegram/{tests,config}
 ```
 
+Note: The configuration file will live at `src/mastra/channels/telegram/config/index.ts` (we'll create it in the next step). Do not place a `config.ts` directly under the channel root.
+
 ## Step 2: Create Configuration Files
 
 ### 2.1 Create Configuration Files
 
-Create `src/mastra/channels/telegram/config.ts`:
+Create `src/mastra/channels/telegram/config/index.ts`:
 
 ```typescript
 /**
@@ -117,14 +120,14 @@ export function validateTelegramConfig(config: Partial<TelegramConfig>): Telegra
 
 ### 3.1 Install Required Dependencies
 
-Install the required dependencies at the project root:
+Install the required dependencies at the project root (use pnpm):
 
 ```bash
 # Install Telegram bot API (if not already installed)
-npm install node-telegram-bot-api
+pnpm add node-telegram-bot-api
 
 # Install TypeScript types (if not already installed)
-npm install --save-dev @types/node-telegram-bot-api
+pnpm add -D @types/node-telegram-bot-api
 ```
 
 ## Step 4: Create Main Adapter
@@ -141,7 +144,7 @@ Create `src/mastra/channels/telegram/adapter.ts`:
 
 import { NormalizedMessage, ProcessedResponse, ChannelUser, ChannelContext } from '../../core/models/message';
 import { CentralMessageProcessor } from '../../core/processor/message-processor';
-import { validateTelegramConfig, TelegramConfig } from './config';
+import { validateTelegramConfig, TelegramConfig } from './config/index';
 import { ChannelAdapter } from '../../core/channels/interface';
 import TelegramBot from 'node-telegram-bot-api';
 
@@ -149,6 +152,7 @@ export class TelegramChannelAdapter implements ChannelAdapter {
   private bot: TelegramBot;
   private processor: CentralMessageProcessor;
   private config: TelegramConfig;
+  private botToken: string; // cached bot token to avoid direct this.bot.token usage
   
   // Implement the ChannelAdapter interface
   channelId = 'telegram';
@@ -169,7 +173,8 @@ export class TelegramChannelAdapter implements ChannelAdapter {
       };
     }
     
-    this.bot = new TelegramBot(this.config.token, botOptions);
+  this.botToken = this.config.token; // cache token once
+  this.bot = new TelegramBot(this.botToken, botOptions);
     
     // Set up message handlers
     this.setupMessageHandlers();
@@ -247,7 +252,7 @@ export class TelegramChannelAdapter implements ChannelAdapter {
       content = `[Image: ${photo.file_id}]`;
       contentType = 'image';
       attachments = [{
-        url: `https://api.telegram.org/file/bot${this.bot.token}/${photo.file_id}`,
+        url: `https://api.telegram.org/file/bot${this.botToken}/${photo.file_id}`,
         type: 'image',
         filename: `telegram_photo_${photo.file_id}.jpg`
       }];
@@ -255,7 +260,7 @@ export class TelegramChannelAdapter implements ChannelAdapter {
       content = `[Document: ${telegramMessage.document.file_name}]`;
       contentType = 'document';
       attachments = [{
-        url: `https://api.telegram.org/file/bot${this.bot.token}/${telegramMessage.document.file_id}`,
+        url: `https://api.telegram.org/file/bot${this.botToken}/${telegramMessage.document.file_id}`,
         type: 'document',
         filename: telegramMessage.document.file_name
       }];
@@ -263,17 +268,18 @@ export class TelegramChannelAdapter implements ChannelAdapter {
       content = `[Voice message]`;
       contentType = 'audio';
       attachments = [{
-        url: `https://api.telegram.org/file/bot${this.bot.token}/${telegramMessage.voice.file_id}`,
+        url: `https://api.telegram.org/file/bot${this.botToken}/${telegramMessage.voice.file_id}`,
         type: 'audio',
         filename: `telegram_voice_${telegramMessage.voice.file_id}.ogg`
       }];
     } else if (telegramMessage.audio) {
-      content = `[Audio: ${telegramMessage.audio.file_name || 'Unknown audio'}]`;
+      const audioLabel = telegramMessage.audio.title || telegramMessage.audio.performer || 'Unknown audio';
+      content = `[Audio: ${audioLabel}]`;
       contentType = 'audio';
       attachments = [{
-        url: `https://api.telegram.org/file/bot${this.bot.token}/${telegramMessage.audio.file_id}`,
+        url: `https://api.telegram.org/file/bot${this.botToken}/${telegramMessage.audio.file_id}`,
         type: 'audio',
-        filename: telegramMessage.audio.file_name
+        filename: audioLabel
       }];
     } else {
       content = '[Unsupported message type]';
@@ -351,9 +357,7 @@ export class TelegramChannelAdapter implements ChannelAdapter {
         case 'document':
           if (response.attachments && response.attachments.length > 0) {
             const docUrl = response.attachments[0].url;
-            await this.bot.sendDocument(chatId, docUrl, {}, {
-              caption: response.content
-            });
+            await this.bot.sendDocument(chatId, docUrl, { caption: response.content });
           } else {
             await this.bot.sendMessage(chatId, response.content);
           }
@@ -552,9 +556,10 @@ Create `src/mastra/channels/telegram/index.ts`:
  * Telegram channel exports for Mastra framework
  */
 
+import { TelegramChannelAdapter } from './adapter';
 export { TelegramChannelAdapter } from './adapter';
-export type { TelegramConfig } from './config';
-export { validateTelegramConfig, defaultTelegramConfig } from './config';
+export type { TelegramConfig } from './config/index';
+export { validateTelegramConfig, defaultTelegramConfig } from './config/index';
 
 // Channel identifier
 export const CHANNEL_NAME = 'telegram';
@@ -585,6 +590,20 @@ Ensure your project's `package.json` includes the required dependencies:
   }
 }
 ```
+
+## Step 6.5: Update Telegram Environment Variables
+
+Before proceeding to documentation, ensure you have set the required environment variables for Telegram integration in your `.env` file:
+
+```env
+TELEGRAM_BOT_TOKEN=your-telegram-bot-token
+TELEGRAM_WEBHOOK_URL=https://your-domain.com/webhook/telegram  # Optional
+TELEGRAM_POLLING=true                                           # Optional
+TELEGRAM_POLLING_INTERVAL=300                                   # Optional
+TELEGRAM_MAX_RETRIES=3                                          # Optional
+```
+
+These variables must be configured before running or testing the Telegram adapter.
 
 ## Step 7: Create Documentation
 
@@ -629,40 +648,24 @@ TELEGRAM_MAX_RETRIES=3                                          # Optional
 ### Programmatic Configuration
 
 ```typescript
-import { TelegramChannelAdapter } from './src/mastra/channels/telegram';
+import { CentralMessageProcessor } from './src/mastra/core/processor/message-processor';
 
-const adapter = new TelegramChannelAdapter({
-  token: 'your-bot-token',
-  webhookUrl: 'https://your-domain.com/webhook/telegram',
-  polling: true,
-  pollingInterval: 300,
-  maxRetries: 3
-}, messageProcessor);
-```
-
-## Usage
-
-### Basic Setup (Integrated with Mastra)
-
-The Telegram adapter is automatically loaded by Mastra when `TELEGRAM_BOT_TOKEN` is set in your environment:
-
-```env
-# .env
-TELEGRAM_BOT_TOKEN=your-telegram-bot-token
-```
-
-### Webhook Setup
-
-```typescript
-// Set up webhook
-await adapter.setWebhook('https://your-domain.com/webhook/telegram');
-
-// Handle webhook requests in your server
-app.post('/webhook/telegram', (req, res) => {
-  // Pass the webhook data to the adapter
-  adapter.handleMessage(req.body);
-  res.sendStatus(200);
-});
+// Updating loadChannels in src/mastra/index.ts
+async function loadChannels(processor: CentralMessageProcessor) {
+  if (process.env.TELEGRAM_BOT_TOKEN) {
+    const { TelegramChannelAdapter } = await import('./channels/telegram');
+    const telegram = new TelegramChannelAdapter({
+      token: process.env.TELEGRAM_BOT_TOKEN,
+      webhookUrl: process.env.TELEGRAM_WEBHOOK_URL,
+      polling: process.env.TELEGRAM_POLLING !== 'false',
+      pollingInterval: process.env.TELEGRAM_POLLING_INTERVAL 
+        ? parseInt(process.env.TELEGRAM_POLLING_INTERVAL) : 300,
+      maxRetries: process.env.TELEGRAM_MAX_RETRIES 
+        ? parseInt(process.env.TELEGRAM_MAX_RETRIES) : 3
+    }, processor);
+    channelRegistry.register('telegram', telegram);
+  }
+}
 ```
 
 ## API Reference

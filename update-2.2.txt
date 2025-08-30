@@ -1,0 +1,25 @@
+[MÔ TẢ]
+File này là checklist cập nhật cho hướng dẫn `mastra/p2-2-channel-specific.md` (phiên bản nâng cấp 2.2).
+Mục đích: liệt kê các hạng mục phải chỉnh sửa / rà soát trước khi đánh dấu hoàn thành.
+Hướng dẫn sử dụng:
+- Đọc từng mục theo thứ tự; sau khi đã áp dụng vào file hướng dẫn thì đổi `[ ]` thành `[x]`.
+- Không thêm nội dung hướng dẫn chi tiết ở đây; chỉ ghi ngắn gọn các thay đổi bắt buộc.
+- Khi commit: nên gộp commit có message dạng `chore(p2-2): apply 2.2 update - done items: ...`.
+Phạm vi: chỉ áp dụng cho phần Channel-Specific (Telegram adapter) – các thay đổi ảnh hưởng format, code snippet, wording.
+
+Lưu ý bắt buộc: MỌI cập nhật phải tuân thủ tuyệt đối các quy tắc trong `RULES.md` (không phá vỡ cấu trúc chuẩn, không đưa business logic vào channel, chỉ dùng interface, chuẩn hóa message/response).
+
+[CHECKLIST]
+[x] 1. Ở mục 1.1, Chuẩn hoá cấu trúc thư mục Telegram theo phương án: tạo thư mục `config/` và đổi file thành `config/index.ts` (không để `config.ts` ở gốc thư mục channel).
+[x] 2. Thay toàn bộ lệnh dùng npm trong hướng dẫn bằng pnpm (vd: pnpm add ..., pnpm add -D ...), đảm bảo không còn xuất hiện “npm install”.
+[x] 3. Ở mục 4.1, cập nhật mọi snippet import từ './config.ts' sang './config/index' (yêu cầu ghi rõ index, không dùng rút gọn './config'); đồng bộ phần mô tả tạo file và cấu trúc thư mục để hiển thị config/index.ts.
+[x] 4. Ở mục 4.1, thay mọi chỗ dùng trực tiếp this.bot.token bằng thuộc tính class `private botToken: string;` (gán trong constructor từ this.config.token) và dùng `this.botToken` khi dựng URL hoặc truy cập token (không dùng biến cục bộ).
+[x] 5. Ở mục 4.1, không dùng trường không tồn tại audio.file_name; hiển thị tên audio bằng telegramMessage.audio.title || telegramMessage.audio.performer || 'Unknown audio'.
+[x] 6. Ở mục 4.1, Dùng `await this.bot.sendDocument(chatId, docUrl, { caption: response.content });` thay cho `await this.bot.sendDocument(chatId, docUrl, {}, { caption: response.content });`
+
+[x] 7. Ở mục 5.1, bổ sung `import { TelegramChannelAdapter } from './adapter';`
+[x] 8. Ở mục 7.1, bổ sung hướng dẫn Programmatic Configuration có hành động: cập nhật hàm loadChannels trong src/mastra/index.ts để truyền config đầy đủ vào TelegramChannelAdapter (token + webhookUrl + polling + pollingInterval + maxRetries) ví dụ:
+	   const adapter = new TelegramChannelAdapter({ token: process.env.TELEGRAM_BOT_TOKEN, webhookUrl: 'https://your-domain.com/webhook/telegram', polling: true, pollingInterval: 300, maxRetries: 3 }, processor);
+[x] 9. Bỏ mục Usage
+[x] 10. Thêm bước cập nhật các biến môi trường cho telegram trước bước 7
+

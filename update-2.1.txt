@@ -1,0 +1,11 @@
+[ ] Thêm metadata: {} vào 
+
+`
+return {
+      content: 'I received your ... . Thank you for sharing!',
+      contentType: 'text',
+      metadata: {}
+    };
+`
+
+[ ] Cảnh báo rằng bước 5 sẽ có lỗi thiếu file nhưng hãy bỏ qua và tiếp tục file 2.2
